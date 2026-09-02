@@ -1,0 +1,123 @@
+\chapter{Appendix}
+\label{ch:appendix}
+
+% Guideline 4.2.7: separate title page from the main body (the
+% \chapter above + \appendix numbering in main.tex provides this),
+% own numbering (A1, A1.1, ... below), source code referenced but not
+% printed in full.
+
+\section{QCar Hardware Safety Limits}
+\label{app:safety-limits}
+
+Table~\ref{tab:app-safety-limits} lists the documented hardware
+safety limits enforced throughout every piece of drive-control code
+presented in this thesis (Section~\ref{sec:qcar-platform}).
+
+\begin{table}[htbp]
+  \centering
+  \caption{QCar documented hardware safety limits.}
+  \label{tab:app-safety-limits}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Limit & Value \\
+    \midrule
+    PWM duty cycle saturation & $\pm 30\%$ \\
+    PWM duty cycle rate limit & $100\%/\mathrm{s}$ \\
+    Battery auto-shutdown & below \SI{10.0}{\volt} \\
+    Battery low-voltage warning & below \SI{10.5}{\volt} \\
+    Steering command range & $\pm 0.5$~rad \\
+    Max.\ physical steering angle & $\pm 0.5236$~rad ($\pm\ang{30}$) \\
+    Overcurrent protection & \SI{5}{\ampere}/\SI{8}{\second}, \SI{10}{\ampere}/\SI{2}{\second}, or \SI{15}{\ampere}/\SI{0.5}{\second} $\to$ forced Neutral mode \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Diagnostic and Calibration Tooling Reference}
+\label{app:tooling}
+
+Table~\ref{tab:app-tooling} summarises the diagnostic scripts
+developed and used throughout Chapters~\ref{ch:hardware-bridge}
+--\ref{ch:nav-integration}. Full source is maintained in the
+project's version-controlled repository (electronic submission), not
+reproduced here in full per the guideline's recommendation that
+programming code be supplied on the electronic data carrier rather
+than printed.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Diagnostic and calibration scripts referenced in this thesis.}
+  \label{tab:app-tooling}
+  \small
+  \begin{tabular}{@{}p{3.8cm}p{9.5cm}@{}}
+    \toprule
+    Script & Purpose \\
+    \midrule
+    \texttt{calibrate\_steering.py} & Static steering-trim calibration aid (Section~\ref{sec:steering-trim}) \\
+    \texttt{drive\_and\_log.py} & Drive to a target distance at a fixed speed, log \texttt{/odom} to CSV, exit automatically (Section~\ref{sec:final-calibration}) \\
+    \texttt{check\_stop\_latency.py} & As above, plus reports cruise velocity and stop latency directly (Section~\ref{sec:deadband-discovery}) \\
+    \texttt{monitor\_goal\_timing.py} & Instruments one Nav2 goal end-to-end: goal-sent, real/displayed motion start and stop, goal-reached (Section~\ref{sec:monitor-goal-timing}) \\
+    \texttt{log\_goal.py} & Logs every \texttt{/plan} replan (sequence-numbered CSVs), \texttt{/odom}, and \texttt{/cmd\_vel} for one goal, for offline K-turn/cusp analysis (Section~\ref{sec:cusp-repro}) \\
+    \texttt{\seqsplit{CuspStraightenerSmoother}} & \texttt{nav2\_core::Smoother} plugin resolving the reversal-cusp freeze (Section~\ref{sec:cusp-smoother-v2}); locked-in production configuration \\
+    \texttt{\seqsplit{IsPathValidDebouncedCondition}} & Custom BT.CPP condition node requiring consecutive failed validity checks before replanning; implemented and hardware-tested, currently reverted/deselected (Section~\ref{sec:cusp-followon-reverted}) \\
+    \texttt{\seqsplit{PathDeviationCritic}} & Custom MPPI critic pulling deviated trajectories toward a lookahead path point; implemented and tested, currently reverted/deselected (Section~\ref{sec:cusp-followon-reverted}) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Real-Hardware Bring-Up Command Reference}
+\label{app:commands}
+
+For reproducibility, the full bring-up sequence used throughout
+Chapters~\ref{ch:hardware-bridge}--\ref{ch:nav-integration} is
+reproduced here.
+
+\begin{lstlisting}[language=bash,caption={Real-hardware bring-up (two QCar terminals, two development-PC terminals).}]
+# --- On the QCar (two terminals) ---
+sudo -E env PYTHONPATH=/home/nvidia/Documents/python \
+    python3 ~/ros2_amit/src/onboard_bridge/qcar_bridge.py
+
+PYTHONPATH=/home/nvidia/Documents/python \
+    python3 ~/ros2_amit/src/onboard_bridge/qcar_lidar_node.py
+
+# --- On the development PC ---
+ros2 run qcar_updated qcar_relay_node.py --ros-args \
+    -p qcar_ip:=<qcar-ip> -p qcar_clock_offset:=<measured-offset>
+
+ros2 launch qcar_updated qcar_nav2.launch.py launch_sim:=false
+\end{lstlisting}
+
+\texttt{qcar\_clock\_offset} (Section~\ref{sec:clock-offset}) and the
+QCar's DHCP-assigned IP address both drift session to session and
+must be re-measured / re-checked before each bring-up, not reused
+from a previous session.
+
+\subsection{Safe Shutdown Sequence}
+\label{app:shutdown}
+
+The shutdown sequence established in Section~\ref{sec:safe-shutdown}
+must be followed in order, using \texttt{SIGINT} (Ctrl-C) exclusively:
+
+\begin{enumerate}
+  \item Stop \texttt{qcar\_relay\_node.py} (development PC).
+  \item Stop the visualisation launch process group (development PC).
+  \item Stop \texttt{qcar\_lidar\_node.py} (QCar).
+  \item Stop \texttt{qcar\_bridge.py} (QCar, requires \texttt{sudo}).
+  \item Confirm both TCP ports are released on the QCar:
+    \texttt{sudo ss -tlnp | grep -E "5555|5556"} should print nothing.
+\end{enumerate}
+
+\section{Source Code and Data Availability}
+\label{app:source-availability}
+
+% TODO: fill in with however your faculty/supervisor wants source
+% code and raw data supplied - e.g. a git repository URL, or "supplied
+% on the accompanying electronic data carrier as specified in
+% guideline Section 4.2.7". If any data is restricted (see guideline
+% Section 4.1.2), note that here instead.
+
+The complete, version-controlled source code for the simulation
+stack (Chapter~\ref{ch:sim-stack}), the hardware bridge
+(Chapter~\ref{ch:hardware-bridge}), and all calibration/diagnostic
+tooling (Appendix~\ref{app:tooling}) referenced throughout this
+thesis is supplied on the accompanying electronic data carrier /
+repository: \texttt{TODO: path or URL}.

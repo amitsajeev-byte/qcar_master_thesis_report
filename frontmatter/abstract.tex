@@ -1,0 +1,28 @@
+% Abstract - guideline 4.1.6: optional, 120-150 words recommended,
+% describes the problem and results, with key words.
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+% Word count checked against guideline 4.1.6 (120-150 words recommended);
+% re-check if this text is edited further.
+
+Autonomous mobile robots are typically developed in simulation before
+deployment on physical hardware, yet the transfer to a real platform
+routinely exposes gaps that simulated testing alone does not predict.
+This thesis documents the migration of a ROS~2 Nav2 navigation stack
+for the Quanser QCar, an Ackermann-steered vehicle, from Gazebo
+simulation onto physical hardware. An incompatibility between the
+robot's onboard ROS~2 Dashing distribution and the ROS~2 Humble
+development host motivated a custom TCP/JSON bridge. The thesis
+presents the bridge's design, the calibration of an open-loop throttle
+model against real actuator behaviour, and the diagnosis of a hardware
+buffering defect misattributed at first to drivetrain coasting. The
+resulting system is validated through closed-loop Nav2 goal-reaching
+tests on the vehicle, and the observed sim-to-real discrepancies are
+quantified.
+
+\vspace{0.5cm}
+\noindent\textbf{Key words:} ROS~2, Nav2, Ackermann steering, sim-to-real
+transfer, Gazebo, Model Predictive Path Integral control, mobile robot
+navigation, Quanser QCar

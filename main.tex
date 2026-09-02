@@ -1,0 +1,82 @@
+% ============================================================
+% Master's Thesis - main document
+% Deggendorf Institute of Technology (DIT)
+%
+% Compiles with the default "pdfLaTeX" recipe (Overleaf: Menu ->
+% Compiler -> pdfLaTeX). Bibliography uses plain BibTeX, not
+% biblatex/biber - deliberately, to keep the compile chain short
+% enough for Overleaf's free-tier compile-time limit:
+%   pdflatex -> bibtex -> pdflatex -> pdflatex
+% Overleaf detects and runs this chain automatically; no manual step
+% needed beyond a normal Recompile.
+%
+% TODO (you): fill in every "TODO" marker across this project before
+% submission - title page fields, abstract, acknowledgement, and the
+% content TODOs left inside each chapter file.
+% ============================================================
+
+\documentclass[11pt,a4paper,oneside]{report}
+
+\input{preamble}
+
+% ---- Title page metadata (used by frontmatter/titlepage.tex) --------
+% Internal thesis (at the university, not a company) - no company
+% supervisor/company fields, see frontmatter/titlepage.tex.
+\newcommand{\thesisTitle}{Development of a SLAM and Autonomous Navigation System for a Self-Driving Car}
+\newcommand{\thesisAuthor}{Amit Sajeev}
+\newcommand{\thesisDegree}{Master of Engineering} % TODO: confirm exact degree title (M.Eng./M.Sc./...) with the Centre for Studies
+\newcommand{\thesisProgramme}{Artificial Intelligence for Smart Sensors / Actuators}
+\newcommand{\thesisSupervisorDIT}{Prof. Dr. Dmitrii Dobriborsci}
+\newcommand{\thesisSubmissionDate}{14.09.2026}
+\newcommand{\thesisMatrikelNr}{22306894}
+
+\begin{document}
+
+% ---------------- Front matter (unnumbered / roman) ------------------
+\pagenumbering{roman}
+\input{frontmatter/titlepage}          % no page number, per guideline 4.1.1
+
+\input{frontmatter/authorship}         % Statement of Authorship - no page number, per 4.1.4
+\clearpage
+
+% \input{frontmatter/acknowledgement}  % TODO: optional, uncomment if you want one (guideline 4.1.3)
+
+\input{frontmatter/abstract}           % 120-150 words, per guideline 4.1.6
+\clearpage
+
+\tableofcontents
+\clearpage
+
+\listoffigures
+\clearpage
+
+\listoftables
+\clearpage
+
+\input{frontmatter/abbreviations}       % per guideline 4.1.5
+\clearpage
+
+% ---------------- Main matter (arabic, restart at 1) -----------------
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\input{chapters/01_introduction}
+\input{chapters/02_groundwork}
+\input{chapters/03_simulation_stack}
+\input{chapters/04_hardware_bridge}
+\input{chapters/05_calibration}
+\input{chapters/06_navigation_integration}
+\input{chapters/07_results}
+\input{chapters/08_summary}
+
+% ---------------- Bibliography ----------------------------------------
+\clearpage
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliographystyle{plain}
+\bibliography{bibliography}
+
+% ---------------- Appendix ---------------------------------------------
+\appendix
+\input{appendix/appendix}
+
+\end{document}

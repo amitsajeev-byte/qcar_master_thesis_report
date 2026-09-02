@@ -1,0 +1,205 @@
+% ============================================================
+% Preamble: formatting compliance with the DIT Thesis Guideline
+% (Deggendorf Institute of Technology, "Thesis Guideline",
+%  Version 1.0, 27.06.2023)
+%
+% Requirements implemented here:
+%  - DIN A4, single-sided printing
+%  - Font size 11-12pt body, 14pt chapter headings
+%  - Margins: top 2.5cm, bottom 2.5cm, left 3cm, right 2cm
+%  - 1.5 line spacing
+%  - Justified text with automatic hyphenation
+%  - Consecutive page numbers in header/footer
+%  - Section numbering 1, 1.1, 1.2, 2, 2.1, 2.1.1 ...
+%  - Headings: not underlined/indented, bold, same font as body,
+%    start with capital letter, fit on one line
+%  - No university logo anywhere (guideline 4.1.1 / 3.5)
+% ============================================================
+
+% --- Page geometry -------------------------------------------------
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=3cm,right=2cm]{geometry}
+
+% --- Language / hyphenation -----------------------------------------
+% Switch babel's main language to ngerman if you write in German;
+% keep english if the thesis is written in English (check with your
+% supervisor which language is expected).
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% Latin Modern: a fully scalable (outline) replacement for the default
+% Computer Modern fonts. Needed because titlesec below requests
+% non-standard font sizes (e.g. \fontsize{14}{16} for chapter
+% headings); without lmodern, LaTeX falls back to Metafont-generated
+% bitmap fonts at those sizes, which are not scalable - and microtype's
+% font expansion feature then fails with a fatal
+% "auto expansion is only possible with scalable fonts" error.
+\usepackage{lmodern}
+
+% --- Font size (11-12pt body, set via documentclass option) --------
+% Body font size is set as a \documentclass option in main.tex.
+
+% --- Line spacing: 1.5 -----------------------------------------------
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Justification with automatic hyphenation ------------------------
+% LaTeX justifies by default; microtype improves justification quality
+% (fewer visible stretched/compressed lines) without changing the
+% guideline-required "justification with automatic hyphenation" look.
+\usepackage{microtype}
+
+% This thesis's prose is dense with long, non-hyphenating \texttt{}
+% identifiers (ROS topic/plugin/parameter names). Without headroom,
+% TeX sometimes has no legal break short of pushing text past the
+% right margin ("Overfull \hbox"), which would visibly violate the
+% guideline's "illustrations and tables [text] are to remain within
+% the page margins" requirement. emergencystretch gives the
+% line-breaker extra last-resort stretch before it would otherwise
+% overfull, fixing these without loosening ordinary paragraphs.
+\emergencystretch=3em
+
+% A handful of table cells hold long filename-like identifiers
+% (e.g. libgazebo_ros_ackermann_drive.so) that are still wider than
+% their column even with emergencystretch, since that only adds
+% inter-word stretch and these are single unbreakable "words". seqsplit
+% allows breaking such a token at any character as a last resort, kept
+% to just those specific cells rather than used document-wide.
+\usepackage{seqsplit}
+
+% --- Headings: bold, same font as body text, not underlined ----------
+\usepackage{titlesec}
+\titleformat{\chapter}[hang]
+  {\normalfont\fontsize{14}{16}\bfseries}{\thechapter}{1em}{}
+\titleformat{\section}
+  {\normalfont\fontsize{12}{14}\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\fontsize{11}{13}\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\fontsize{11}{13}\bfseries}{\thesubsubsection}{1em}{}
+\titlespacing*{\chapter}{0pt}{0pt}{20pt}
+
+% --- Section numbering depth (down to subsubsection, e.g. 2.1.1) -----
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+% --- Header/footer: consecutive page numbers --------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% A plain style for chapter-opening pages (still numbered, no header rule)
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% --- Figures and tables ------------------------------------------------
+\usepackage{graphicx}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf,justification=justified}
+\usepackage{booktabs}   % clean table rules (no vertical/frame lines)
+\usepackage{longtable}  % tables that span multiple pages (Results ch.)
+\usepackage{array}
+
+% --- Formulas and physical quantities -----------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}    % correct unit typesetting: \SI{2.3}{\ampere} etc.
+\sisetup{
+  detect-all,
+  output-decimal-marker = {.},   % dot as decimal separator (English)
+  per-mode = symbol
+}
+
+% --- Code / configuration listings (launch files, YAML, Python) --------
+\usepackage{listings}
+\usepackage{xcolor}
+\definecolor{codebg}{RGB}{245,245,245}
+
+% Custom, minimal language definitions for every language= used in this
+% thesis's lstlisting blocks (Python, C++, XML, bash), defined BEFORE
+% any \begin{lstlisting} uses them. This deliberately overrides
+% `listings`'s own bundled per-language keyword databases
+% (lstlang1.sty/lstlang2.sty/lstlang3.sty) rather than relying on them -
+% a known TeX Live 2026 regression in that bundled data triggers
+% "Extra alignment tab has been changed to \cr" from inside
+% lstlang1.sty on some language definitions. Defining the language
+% ourselves means `listings` never loads the bundled file for these
+% four names at all, sidestepping the bug regardless of exactly which
+% bundled definition is at fault. Highlighting is intentionally simple
+% (comments, strings, a short keyword list) - plenty for short
+% illustrative snippets, and it will never break a compile this way.
+\lstdefinelanguage{Python}{
+  morekeywords={def,class,if,elif,else,for,while,return,import,from,as,
+    try,except,finally,with,lambda,None,True,False,and,or,not,in,is,
+    break,continue,pass,raise,yield,global,nonlocal,self,print},
+  sensitive=true,
+  morecomment=[l]{\#},
+  morestring=[b]",
+  morestring=[b]'
+}
+\lstdefinelanguage{XML}{
+  morecomment=[s]{<!--}{-->},
+  morestring=[b]",
+  morestring=[b]',
+  sensitive=true
+}
+\lstdefinelanguage{C++}{
+  morekeywords={void,int,float,double,bool,char,const,static,class,
+    struct,namespace,public,private,protected,return,if,else,for,
+    while,do,switch,case,break,continue,new,delete,template,typename,
+    using,auto,size_t,true,false,nullptr,enum},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]"
+}
+\lstdefinelanguage{bash}{
+  morekeywords={sudo,python3,ros2,run,launch,env,export,echo,cd},
+  sensitive=true,
+  morecomment=[l]{\#},
+  morestring=[b]",
+  morestring=[b]'
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  breaklines=true,
+  frame=single,
+  framerule=0.3pt,
+  columns=flexible,
+  captionpos=b,
+  numbers=left,
+  numberstyle=\tiny,
+  keywordstyle=\color{blue!60!black}\bfseries,
+  commentstyle=\color{gray},
+  showstringspaces=false
+}
+
+% --- Bibliography: numeric, DIN-style [1]-style in-text citation -------
+% Plain LaTeX + BibTeX (\bibliographystyle{plain} in main.tex), not
+% biblatex/biber: functionally equivalent numeric-bracket output for a
+% bibliography this size, but only one extra compile pass instead of
+% biber's own (slower) separate backend - matters on Overleaf's free
+% compile-time limit. \bibliographystyle{plain} already sorts entries
+% alphabetically by author while numbering them [1], [2], ... in that
+% order, matching the guideline's "numbered upon citation order OR
+% alphabetically sorted" allowance (here: both at once).
+
+% --- Abbreviations list --------------------------------------------------
+% Rendered as a plain table (frontmatter/abbreviations.tex) rather than
+% via the glossaries package, which needs its own external
+% makeglossaries run - another full extra pass this document doesn't
+% need for a short, static, alphabetically-sorted list.
+
+% --- Hyperlinks (internal cross-references only; keep unobtrusive) -----
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
+
+% --- Appendix numbering: A1, A1.1, A1.2, A2, A3 ... ---------------------
+\usepackage{appendix}

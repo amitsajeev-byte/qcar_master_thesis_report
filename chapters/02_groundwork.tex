@@ -1,0 +1,737 @@
+\chapter{Groundwork and Fundamental Principles}
+\label{ch:groundwork}
+
+% Guideline recommended length: 8-16 pages.
+% TODO: this chapter is written to explain every concept the later
+% methodology chapters rely on, but it is intentionally not padded
+% with generic textbook material the reader can be assumed to know.
+% Expand individual sections (more depth on MPPI's cost formulation,
+% a worked AMCL sensor-model example, etc.) if your supervisor's
+% faculty expects a deeper literature review for a Master's thesis.
+
+This chapter introduces the concepts and software components that the
+remainder of the thesis builds on: the ROS~2 communication model
+(Section~\ref{sec:ros2-model}), Ackermann steering kinematics
+(Section~\ref{sec:ackermann-kinematics}), the Gazebo simulator
+(Section~\ref{sec:gazebo}), SLAM via Cartographer
+(Section~\ref{sec:cartographer}), the Nav2 navigation stack
+(Section~\ref{sec:nav2}), the physical Quanser QCar platform
+(Section~\ref{sec:qcar-platform}), and the general concept of the
+sim-to-real gap (Section~\ref{sec:sim-to-real-concept}).
+
+\section{The ROS~2 Communication Model}
+\label{sec:ros2-model}
+
+The Robot Operating System (ROS) is not an operating system in the
+kernel sense but a middleware and tooling ecosystem for distributed
+robotics software: independent processes (\emph{nodes}) communicate
+by publishing and subscribing to named, typed \emph{topics}, calling
+\emph{services} for synchronous request/response interactions, or
+invoking long-running, cancellable, feedback-reporting
+\emph{actions} \cite{quigley2009ros}. The original ROS (subsequently
+referred to as ROS~1) relied on a custom TCP-based transport and a
+single centralised \texttt{roscore} master process for node
+discovery -- a design later recognised as unsuitable for real-time,
+multi-robot, or safety-relevant deployments, since the master is both
+a single point of failure and a source of unbounded discovery
+latency \cite{macenski2022ros2}.
+
+ROS~2 replaces this transport with the Data Distribution Service
+(DDS), an OMG-standardised, decentralised publish-subscribe protocol
+originally developed for defence and industrial real-time systems
+\cite{omg2015dds}. Each ROS~2 node embeds a DDS participant; nodes
+discover each other via a standardised discovery protocol (commonly
+Simple Discovery Protocol, SPDP/SEDP) rather than a central registry,
+and topic/service/action semantics are implemented on top of DDS's
+publish-subscribe and request-reply patterns via the ROS Middleware
+interface (RMW), an abstraction layer that lets multiple DDS
+implementations (Fast DDS, Cyclone DDS, and others) serve as
+ROS~2's transport interchangeably \cite{maruyama2016exploring}. DDS
+communication is governed per-topic by Quality of Service (QoS)
+policies -- reliability (\texttt{RELIABLE} vs.\ \texttt{BEST\_EFFORT}),
+durability (\texttt{VOLATILE} vs.\ \texttt{TRANSIENT\_LOCAL}, the
+latter retaining and re-delivering the last sample(s) to late-joining
+subscribers), and history depth among others -- and a mismatch
+between a publisher's and a subscriber's QoS settings can silently
+prevent message delivery even when both sides otherwise appear
+correctly configured; Section~\ref{sec:monitor-goal-timing} describes
+one such mismatch encountered directly during this project's own
+diagnostic tooling.
+
+This discovery and transport layer is directly relevant to this
+thesis's central architectural constraint. DDS participants must
+share a compatible wire protocol version to discover and communicate
+with each other at all; Chapter~\ref{ch:hardware-bridge} documents
+that the QCar's factory-installed ROS~2 Dashing distribution (2019)
+and this project's ROS~2 Humble development host (2022) do not, in
+practice, satisfy this requirement, which is the direct motivation
+for the TCP/JSON bridge presented there.
+
+\subsection{DDS Discovery: Why an Incompatibility Manifests as Silence}
+\label{sec:dds-discovery-mechanism}
+
+Understanding \emph{why} a protocol-version mismatch produces total
+silence rather than a partial or degraded connection requires a
+closer look at how two DDS participants find each other in the first
+place, since this mechanism is what Chapter~\ref{ch:hardware-bridge}'s
+diagnosis directly exercises. DDS discovery happens in two stages.
+First, the Simple Participant Discovery Protocol (SPDP) has every
+participant periodically multicast (by default) a small announcement
+of its own existence and the network endpoints it listens on, and
+listen for the equivalent announcements from others -- this is how
+two DDS processes on the same network first become aware of each
+other at all, with no central broker involved. Second, once two
+participants know of each other via SPDP, the Simple Endpoint
+Discovery Protocol (SEDP) exchanges the finer-grained information
+each side needs to actually match publishers to subscribers: topic
+names, data types, and QoS policies. Only after SEDP completes
+successfully does either side create the local proxy objects needed
+to actually send or receive user data -- a topic that exists on one
+side but was never successfully matched via SEDP behaves, from the
+application's point of view, exactly as if the other process did not
+exist, with no error raised on either side, since DDS discovery is
+a best-effort background process, not a connection attempt that can
+fail loudly.
+
+Both SPDP and SEDP messages are themselves serialised using the DDS
+wire protocol (RTPS -- Real-Time Publish-Subscribe), which is
+versioned. A participant running an RTPS implementation that predates
+a given protocol revision does not necessarily reject a newer
+participant's announcement outright; depending on exactly which
+fields changed between versions, it can instead fail to parse it
+correctly, or parse it into a form that never completes the
+handshake -- from the outside, this looks identical to no
+announcement having arrived at all. This is consistent with what
+Section~\ref{sec:rmw-incompatibility} confirmed directly on hardware:
+raw UDP traffic reached both machines correctly (ruling out the
+network itself), but SPDP/SEDP discovery between ROS~2 Dashing's and
+ROS~2 Humble's respective bundled Fast~DDS versions never completed
+regardless, exactly the signature of an RTPS-level incompatibility
+rather than a firewall or addressing problem.
+
+QoS policies add a second, independent way for two otherwise
+discoverable endpoints to fail to exchange data, this time by
+\emph{design} rather than by defect -- DDS defines an explicit
+compatibility rule per policy, evaluated during SEDP matching, that a
+subscriber may request a QoS \emph{no stronger} than what a publisher
+offers (Table~\ref{tab:qos-compatibility}). A subscriber requesting a
+policy stronger than the publisher offers on that dimension is a
+declared incompatibility, and DDS silently does not match that
+pair -- again, an application-level developer would learn nothing
+about this without independently comparing the two sides' QoS
+settings.
+
+\begin{table}[htbp]
+  \centering
+  \caption{QoS compatibility rule for the two policies relevant to this thesis (strongest requestable value shown first).}
+  \label{tab:qos-compatibility}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Policy & Publisher offers & Subscriber may request \\
+    \midrule
+    Reliability & \texttt{RELIABLE} & \texttt{RELIABLE} or \texttt{BEST\_EFFORT} \\
+    Reliability & \texttt{BEST\_EFFORT} & \texttt{BEST\_EFFORT} only \\
+    Durability & \texttt{TRANSIENT\_LOCAL} & \texttt{TRANSIENT\_LOCAL} or \texttt{VOLATILE} \\
+    Durability & \texttt{VOLATILE} & \texttt{VOLATILE} only \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+By this rule, a \texttt{VOLATILE} subscriber against a
+\texttt{TRANSIENT\_LOCAL} publisher is formally compatible -- which is
+exactly the configuration Section~\ref{sec:monitor-goal-timing}
+found, on real hardware, delivering zero messages in practice despite
+being spec-compliant. Section~\ref{sec:monitor-goal-timing} discusses
+the likely practical reason (durability governs whether \emph{historical},
+already-published samples are replayed to a late-joining subscriber,
+not merely whether future ones are delivered -- a \texttt{VOLATILE}
+subscriber that joins after a transient-local publisher's relevant
+samples were already sent may receive none of the backlog and then
+simply wait for a next sample that, for a low-frequency topic like
+action status, may not arrive for a long time); the point for this
+chapter is the general one -- formal QoS compatibility, as defined by
+the DDS specification, is a necessary but not sufficient condition
+for an application to actually observe the message flow it expects.
+
+\subsection{The Action Interface and Goal Lifecycle}
+\label{sec:action-lifecycle}
+
+Nav2's \texttt{navigate\_to\_pose} interface, used throughout
+Chapter~\ref{ch:nav-integration}, is a ROS~2 \emph{action} -- built on
+top of topics and services rather than being a distinct transport,
+an action pairs a goal-request service call with two topics the
+server publishes on: a feedback topic (periodic progress updates) and
+a status topic, which reports each known goal's current state as one
+of a fixed enumeration (\texttt{ACCEPTED}, \texttt{EXECUTING},
+\texttt{CANCELING}, \texttt{SUCCEEDED}, \texttt{CANCELED},
+\texttt{ABORTED}, among others). The status topic uses
+\texttt{TRANSIENT\_LOCAL} durability specifically so a subscriber that
+starts listening partway through a goal's execution can still recover
+its current state from the retained history, rather than being
+blind until the next status change -- the same durability property
+discussed above.
+
+Because status updates are only published when the server's internal
+state machine actually transitions, and the status topic's history
+depth is finite, a fast state machine can advance through more than
+one transition between two publishes that an external observer
+actually receives -- there is no guarantee every individual state is
+individually observable, only that the \emph{latest} state at any
+polling instant is correct. Section~\ref{sec:monitor-goal-timing}
+documents exactly this: a goal observed to skip directly from absent
+to \texttt{EXECUTING} in one status message, with no separately
+observable \texttt{ACCEPTED} update in between, even though the
+server's internal state machine does pass through
+\texttt{ACCEPTED} on its way to \texttt{EXECUTING} -- the transition
+happened, but no status publish was ever emitted while it was current
+in isolation. This is a general property of polling a periodically
+published state summary rather than a special case of this one topic.
+
+\section{Ackermann Steering Kinematics}
+\label{sec:ackermann-kinematics}
+
+The QCar is a rear-wheel-drive vehicle with front-wheel Ackermann
+steering: the two front wheels pivot independently about
+near-vertical steering axes such that, for any commanded steering
+angle, both front wheels' instantaneous velocity vectors are
+perpendicular to lines drawn through a single common point on the
+extended rear axle -- the vehicle's instantaneous centre of rotation.
+This geometric constraint means the two front wheels must, in
+general, be steered to slightly different angles (the inner wheel
+turning more sharply than the outer) so that all four wheels roll
+without slipping through a common turn centre.
+
+For control and estimation purposes, this thesis follows the
+standard simplification to a single-track (``bicycle'') model
+\cite{rajamani2011vehicle}, which replaces the two front wheels with
+a single virtual wheel at the centre of the front axle steered at
+angle $\delta$, and the two rear wheels with a single virtual wheel
+at the centre of the rear axle. With vehicle heading $\theta$,
+wheelbase $L$ (the longitudinal distance between the front and rear
+axles), and rear-axle speed $v$, the kinematic bicycle model is:
+
+\begin{align}
+  \dot{x} &= v \cos\theta \label{eq:bicycle-x}\\
+  \dot{y} &= v \sin\theta \label{eq:bicycle-y}\\
+  \dot{\theta} &= \frac{v}{L}\tan\delta \label{eq:bicycle-theta}
+\end{align}
+
+and the corresponding instantaneous turning radius about the rear
+axle is
+
+\begin{equation}
+  R = \frac{L}{\tan\delta}. \label{eq:bicycle-radius}
+\end{equation}
+
+Equation~\ref{eq:bicycle-theta} is the basis of the onboard bridge's
+dead-reckoning odometry described in Chapter~\ref{ch:hardware-bridge},
+which genuinely integrates wheel-encoder and commanded-steering
+readings forward through this relationship at every control cycle to
+estimate pose from scratch. A single-track model is a simplification
+-- it assumes no lateral tyre slip and treats both front wheels as a
+single steering angle rather than the true Ackermann-differentiated
+pair -- and Chapter~\ref{ch:calibration} presents direct evidence of
+where this simplification's limits were reached in practice on
+physical hardware (Section~\ref{sec:deadband-discovery}).
+
+\subsection{The True Two-Wheel Ackermann Angle}
+\label{sec:true-ackermann}
+
+The single-track model above is a control- and estimation-time
+convenience; it is not what the Gazebo drive plugin actually commands
+at the level of the two physical front wheels. Because the two front
+wheels steer about laterally separated axes, a single-track model's
+one steering angle $\delta$ must, in general, be converted into two
+slightly different angles -- the inner wheel (on the side the vehicle
+is turning toward) steered more sharply than the outer wheel -- so
+that both front wheels' rolling directions remain tangent to circles
+sharing the same centre on the extended rear axle, the condition for
+rolling without slipping introduced in Section~\ref{sec:ackermann-kinematics}'s
+opening paragraph. With track width $T$ (the lateral distance between
+the two front steering axes) and wheelbase $L$, the exact left- and
+right-wheel steering angles corresponding to a single-track angle
+$\delta$ are:
+
+\begin{align}
+  \delta_{\text{left}} &= \operatorname{atan2}\!\left(\tan\delta,\ 1 - \dfrac{T}{2L}\tan\delta\right) \label{eq:ackermann-left}\\
+  \delta_{\text{right}} &= \operatorname{atan2}\!\left(\tan\delta,\ 1 + \dfrac{T}{2L}\tan\delta\right) \label{eq:ackermann-right}
+\end{align}
+
+(signed so that a positive $\delta$, a left turn, gives
+$\delta_{\text{left}} > \delta_{\text{right}}$ -- the inside wheel of
+the turn steers further). This is precisely the pair of relationships
+the \texttt{gazebo\_ros\_ackermann\_drive} plugin evaluates every
+simulation step from a single commanded angular velocity, and is the
+formula Chapter~\ref{ch:sim-stack} refers to when describing the
+plugin auto-computing Ackermann geometry from URDF joint positions:
+$T$ and $L$ in Equations~\ref{eq:ackermann-left}--\ref{eq:ackermann-right}
+are measured directly from the URDF's own front-hub joint origins at
+spawn time, never stated as separate configuration values. As
+$T \to 0$ (a vanishingly narrow front track), both angles converge to
+the single-track $\delta$, confirming Equations~\ref{eq:ackermann-left}--\ref{eq:ackermann-right}
+correctly generalise, rather than contradict, the simpler model of
+Equations~\ref{eq:bicycle-x}--\ref{eq:bicycle-theta}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{QCar Ackermann geometry parameters used throughout this thesis.}
+  \label{tab:qcar-geometry}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Parameter & Value & Source \\
+    \midrule
+    Wheelbase $L$ & \SI{0.25725}{\meter} & URDF joint geometry (measured) \\
+    Front track width & \SI{0.1118}{\meter} & URDF joint geometry (measured) \\
+    Rear track width & \SI{0.1122}{\meter} & URDF joint geometry (measured) \\
+    Wheel radius & \SI{0.033}{\meter} & Wheel mesh bounding box (measured) \\
+    Max.\ steering angle $\delta_{max}$ & \SI{0.5236}{\radian} (\ang{30}) & Vehicle/plugin limit \\
+    Min.\ turning radius (from Eq.~\ref{eq:bicycle-radius}) & \SI{0.446}{\meter} & Derived \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Simulation with Gazebo}
+\label{sec:gazebo}
+
+Gazebo is a physics-based 3D robot simulator that integrates a rigid-
+body dynamics engine, sensor models (LiDAR, cameras, IMUs), and a
+plugin architecture for injecting custom actuator and controller
+logic into the simulated world \cite{koenig2004gazebo}. Two
+architecturally distinct generations of Gazebo are relevant to this
+project's history: \emph{Gazebo Classic} (versions up to 11), which
+integrates with ROS~2 through the separate \texttt{gazebo\_ros} /
+\texttt{gazebo\_plugins} packages, and the newer \emph{Gazebo Sim}
+(formerly Ignition Gazebo), which integrates through
+\texttt{ros\_gz\_sim} / \texttt{ros\_gz\_bridge}. The two are not
+drop-in replacements for each other: plugin filenames, topic
+remapping mechanisms, and world-file (SDF) syntax for built-in
+physics/sensor systems all differ between them, and a package written
+against one will not load under the other without a systematic
+conversion (encountered directly in this project and reported in
+Section~\ref{sec:humble-conversion}).
+
+This project uses Gazebo Classic~11 with the \texttt{gazebo\_ros}
+family of plugins, matching the ROS~2 Humble / Ubuntu 22.04 host
+environment, in which Gazebo Sim's binaries are not available at all.
+The robot itself is described in the Unified Robot Description
+Format (URDF), an XML dialect specifying the vehicle's kinematic tree
+(links and joints), visual meshes, and collision geometry; a
+\texttt{<gazebo>} block within the URDF attaches simulation-only
+elements -- sensor definitions and the drive plugin
+(\texttt{libgazebo\_ros\_ackermann\_drive.so}) that subscribes to
+\texttt{/cmd\_vel} and converts commanded linear/angular velocity
+into per-wheel drive and steering-hub joint efforts using the
+Ackermann geometry of Section~\ref{sec:ackermann-kinematics}, which
+it auto-computes from the URDF's own joint and collision geometry at
+spawn time rather than requiring it to be restated in a separate
+configuration file.
+
+A recurring practical property of this plugin, directly relevant to
+Chapter~\ref{ch:sim-stack}, is that its wheel-radius auto-detection
+only supports primitive collision shapes (cylinders, spheres); a
+mesh-shaped wheel collision silently yields a wheel radius of zero,
+which propagates as a division-by-zero into the plugin's velocity PID
+controller. Simulated friction is likewise not automatic: both the
+wheel links and the ground plane must be assigned explicit Coulomb
+friction coefficients (SDF's \texttt{mu1}/\texttt{mu2}) or the
+simulated vehicle exhibits perfect wheel slip with no resulting
+translation regardless of commanded wheel speed. Neither failure mode
+raises an error -- both look, from the outside, like ``the robot is
+not moving,'' and both are addressed in detail in
+Section~\ref{sec:not-moving-bug}.
+
+\subsection{The Plugin's Control Loop: PID and the Physics Step}
+\label{sec:gazebo-pid-loop}
+
+The drive plugin does not run on its own timer; it registers a
+callback on Gazebo's \texttt{WorldUpdateBegin} event, which fires
+once per physics step of the rigid-body solver -- by default \SI{1}{\milli\second}
+of simulated time per step, i.e.\ \SI{1000}{\hertz}, independent of
+and generally much faster than any ROS~2 topic rate in the system.
+Every single physics step, regardless of whether a new
+\texttt{/cmd\_vel} message has arrived, the callback re-reads the
+rear wheel's current angular velocity from the physics engine,
+compares it against the most recently \emph{commanded} linear
+velocity converted to an equivalent target angular velocity
+($\text{target\_linear} / \text{wheel\_radius}$), and passes that
+error through a discrete PID controller whose output is applied
+directly as a joint \emph{force} (torque), not a velocity -- this is
+a torque-controlled velocity-tracking loop, not a kinematic
+teleport of the wheel to a commanded speed. The controller update
+takes the classical form
+
+\begin{equation}
+  u(t) = K_p\, e(t) + K_i \int_0^t e(\tau)\, \mathrm{d}\tau + K_d \frac{\mathrm{d}e(t)}{\mathrm{d}t},
+  \qquad e(t) = \text{measured}(t) - \text{target}(t),
+  \label{eq:pid}
+\end{equation}
+
+evaluated once per physics step with the integral and derivative
+terms accumulated/estimated over the actual (possibly non-uniform)
+time elapsed since the previous step, and with the integral term
+optionally clamped to a configured $[i_{\min}, i_{\max}]$ range to
+prevent unbounded windup while the system is far from its target.
+Three independent instances of this controller run inside the
+plugin -- one for the rear-axle drive velocity, and one each for the
+left and right steering hubs, tracking the two Ackermann angles of
+Equations~\ref{eq:ackermann-left}--\ref{eq:ackermann-right}
+independently rather than a single shared steering command. All
+three sets of gains ($K_p$, $K_i$, $K_d$) are declared per-vehicle in
+the URDF's \texttt{<gazebo>} plugin block, and Section~\ref{sec:not-moving-bug}
+documents in detail what happens when these gains are tuned for one
+physical configuration (e.g.\ frictionless wheels) and then reused
+unchanged after that configuration changes.
+
+Equation~\ref{eq:pid} also explains precisely why the wheel-radius
+defect above is destructive rather than merely inaccurate: with
+$\text{wheel\_radius} = 0$, the target angular velocity
+$\text{target\_linear}/\text{wheel\_radius}$ is not merely wrong, it is
+unbounded for any nonzero commanded linear velocity, so $e(t)$ itself
+is unbounded and the PID controller is driven to its output
+saturation limit (or to a floating-point infinity/NaN) regardless of
+how the three gains are tuned -- no amount of gain retuning can
+compensate for an error signal that is not a finite number in the
+first place, which is why this class of bug survives naive
+``just tune the PID harder'' troubleshooting.
+
+\subsection{Contact Friction: the Coulomb Model and Friction Cone}
+\label{sec:friction-theory}
+
+Gazebo Classic's default physics engine, the Open Dynamics Engine
+(ODE), models contact friction at each collision point using a
+Coulomb friction approximation: the maximum tangential (sliding)
+force a contact can sustain before slipping is proportional to the
+normal (compressive) force pressing the two surfaces together, with
+the constant of proportionality being the friction coefficient
+$\mu$. ODE further allows this coefficient to be specified separately
+along two orthogonal directions in the contact plane
+(\texttt{mu1}/\texttt{mu2} in the URDF/SDF -- e.g.\ a tyre could in
+principle grip differently along its rolling direction than sideways
+across it, though this project sets both equal, i.e.\ isotropic
+friction), and its exact treatment of the resulting two-dimensional
+friction limit is configurable between a computationally cheaper
+four-sided ``friction pyramid'' approximation and a smoother
+\texttt{cone\_model} approximation to the true circular Coulomb limit
+-- the latter is explicitly selected in this project's drive plugin
+(\texttt{physicsEngine->SetParam("friction\_model", "cone\_model")}),
+trading a small amount of solver cost for a more physically faithful
+friction limit shape.
+
+Critically, \textbf{ODE applies no friction at all to a contact whose
+$\mu_1$/$\mu_2$ default to zero} -- there is no implicit ``reasonable
+default'' friction coefficient assumed for an unconfigured surface,
+unlike, say, a default coefficient of restitution. This is precisely
+why Section~\ref{sec:not-moving-bug}'s bug~2 (zero wheel friction)
+produces literal, total 100\% slip rather than merely reduced
+traction: with $\mu = 0$, the Coulomb limit on tangential force is
+zero regardless of how hard the wheel presses into the ground, so no
+sliding friction force -- and therefore no forward thrust on the
+chassis -- can develop at all, no matter how fast the wheel itself
+spins.
+
+\section{Simultaneous Localization and Mapping: Cartographer}
+\label{sec:cartographer}
+
+Simultaneous Localization and Mapping (SLAM) is the problem of
+building a map of an unknown environment while concurrently
+estimating the robot's pose within that same map, using only the
+robot's own sensor stream and (optionally) odometry. This thesis uses
+Google's Cartographer \cite{hess2016cartographer}, a real-time 2D/3D
+LiDAR SLAM system that performs local scan matching to build
+submaps and a global pose-graph optimisation to detect and correct
+loop closures, exposed to ROS~2 via the \texttt{cartographer\_ros}
+package. Cartographer can either fuse external odometry into its
+scan-matching prediction or perform scan-matching-only pose
+estimation (\texttt{use\_odometry: false}), in which case it also
+provides the full \texttt{map} $\rightarrow$ \texttt{odom}
+$\rightarrow$ \texttt{base} transform (TF) chain itself
+(\texttt{provide\_odom\_frame: true}) rather than expecting an
+external odometry source to supply the \texttt{odom}
+$\rightarrow$ \texttt{base} portion. This configuration choice --
+made for this project's mapping pipeline and detailed in
+Chapter~\ref{ch:hardware-bridge} -- turned out to remove an entire
+class of TF-ownership conflict between Cartographer and the vehicle's
+own drive-plugin odometry that would otherwise arise, since ROS~2's
+TF system permits only one broadcaster per transform edge at a time
+without producing ambiguous, jittering results.
+
+\section{The Nav2 Navigation Stack}
+\label{sec:nav2}
+
+Nav2 is the ROS~2 successor to the ROS~1 navigation stack, providing
+a modular, plugin-based pipeline for autonomous point-to-point
+navigation against a known (or concurrently built) map
+\cite{macenski2020nav2}. Its major components, all used in this
+thesis, are:
+
+\begin{description}
+  \item[Costmaps] Layered 2D occupancy grids (static map layer,
+    obstacle/LiDAR layer, inflation layer) that represent both the
+    known static environment and dynamically observed obstacles as
+    traversability cost, separately for global path planning and
+    local trajectory control.
+  \item[AMCL (Adaptive Monte Carlo Localization)] A particle-filter
+    localisation algorithm that maintains a probability distribution
+    over the robot's pose as a weighted set of discrete pose
+    hypotheses (particles), resampled according to how well each
+    particle's predicted LiDAR scan matches the actual scan against
+    the static map, following the general Monte Carlo localisation
+    framework \cite{thrun2005probabilistic}. AMCL's motion-model noise
+    parameters (commonly denoted $\alpha_1$--$\alpha_5$) control how
+    much particle spread is injected per unit of commanded motion;
+    Chapter~\ref{ch:nav-integration} documents a real localisation
+    failure mode -- and its correction -- tied directly to these
+    parameters.
+  \item[Global planning] Nav2's \texttt{SmacPlannerHybrid} plugin,
+    used in this project, plans a kinematically feasible path using a
+    hybrid-state A* search with a Reeds-Shepp motion primitive set,
+    respecting the vehicle's minimum turning radius
+    (Table~\ref{tab:qcar-geometry}) rather than planning paths the
+    physical vehicle cannot actually follow.
+  \item[Local trajectory control: MPPI] Model Predictive Path
+    Integral control \cite{williams2016mppi,williams2017mppi} is a
+    sampling-based model-predictive control method: at each control
+    cycle, a large number ($\mathcal{O}(1000)$) of candidate control
+    sequences are simulated forward through a vehicle model over a
+    fixed horizon, each rollout is scored by a weighted sum of cost
+    terms (\emph{critics} in Nav2's terminology -- path alignment,
+    path following, goal distance, obstacle cost, and others), and the
+    executed control is an importance-weighted average across all
+    sampled rollouts rather than the single lowest-cost trajectory.
+    This avoids the need for a convex, analytically differentiable
+    cost function or vehicle model, at the cost of requiring many
+    parallel forward simulations per control cycle. Nav2's MPPI
+    controller plugin supports custom critic plugins loaded
+    alongside the stock set; Section~\ref{sec:mppi-critic} describes
+    a custom critic developed as part of this project's navigation
+    stack.
+  \item[Behavior Trees] Nav2 orchestrates recovery behaviours (costmap
+    clearing, spinning in place, waiting, backing up) and overall
+    navigation logic via an externally configurable behaviour tree
+    (BT) rather than hard-coded state machine logic, allowing
+    per-robot customisation of, for instance, which recovery actions
+    are physically valid for a given platform -- directly relevant to
+    Section~\ref{sec:bt-fix}, where the stock recovery tree's default
+    in-place \texttt{Spin} action is shown to be physically
+    unachievable for an Ackermann-steered vehicle.
+\end{description}
+
+\subsection{MPPI in Detail: Sampling, Scoring, and the Softmax Update}
+\label{sec:mppi-math}
+
+MPPI's central idea is to replace the search for a single optimal
+control sequence with a weighted average over many randomly
+perturbed candidates, where the weighting itself is derived from an
+information-theoretic optimality argument rather than chosen
+heuristically \cite{williams2016mppi,williams2017mppi}. Concretely,
+given a current nominal control sequence
+$\mathbf{u} = (u_0, \ldots, u_{T-1})$ over a horizon of $T$ steps,
+the controller draws $K$ independent perturbed sequences
+
+\begin{equation}
+  u_t^{(k)} = u_t + \varepsilon_t^{(k)}, \qquad \varepsilon_t^{(k)} \sim \mathcal{N}(0, \Sigma), \quad k = 1, \ldots, K,
+  \label{eq:mppi-sample}
+\end{equation}
+
+rolls each one forward through the vehicle model (the Ackermann
+bicycle model of Section~\ref{sec:ackermann-kinematics}, in this
+project's configuration) to obtain a full predicted trajectory
+$\tau^{(k)}$, and evaluates a total cost $S(\tau^{(k)})$ for each --
+in Nav2's implementation, this total cost is exactly the running sum
+that every enabled critic plugin (including the custom
+\texttt{EarlyCommitCritic} of Section~\ref{sec:mppi-critic}) adds
+into via a single shared per-trajectory accumulator, so
+Section~\ref{sec:mppi-critic}'s critic contributes one additive term
+among several to $S(\tau^{(k)})$, not a separate decision stage.
+Trajectories are then combined into an updated control sequence via
+an importance-sampling weighted average:
+
+\begin{equation}
+  w^{(k)} = \frac{\exp\!\left(-\frac{1}{\lambda}\left(S(\tau^{(k)}) - \rho\right)\right)}
+                 {\sum_{j=1}^{K} \exp\!\left(-\frac{1}{\lambda}\left(S(\tau^{(j)}) - \rho\right)\right)},
+  \qquad
+  u_t^{\text{new}} = \sum_{k=1}^{K} w^{(k)}\, u_t^{(k)},
+  \label{eq:mppi-weight}
+\end{equation}
+
+where $\rho = \min_k S(\tau^{(k)})$ is subtracted purely for
+numerical stability (so the largest exponent evaluated is always
+zero) and $\lambda > 0$ is a temperature parameter controlling how
+sharply the weighting favours the very lowest-cost rollouts: as
+$\lambda \to 0$, Equation~\ref{eq:mppi-weight} approaches a hard
+arg-min over the sampled trajectories, while larger $\lambda$
+approaches a uniform average across all of them, largely ignoring
+cost. Only the first control $u_0^{\text{new}}$ of the updated
+sequence is actually sent to the vehicle each control cycle, after
+which the whole horizon is shifted by one step and the process
+repeats -- the standard receding-horizon pattern shared with other
+model-predictive control methods, but arrived at here via random
+sampling and a softmax-like weighted average rather than a gradient-
+or search-based optimisation over a differentiable cost surface. This
+is precisely why MPPI tolerates the sharply non-smooth, hand-crafted
+critic terms used throughout Nav2 (including a critic like
+\texttt{EarlyCommitCritic}, which is not differentiable in any
+convenient closed form) without requiring them to be reformulated as
+a smooth, gradient-friendly cost function first.
+
+\subsection{AMCL in Detail: The Particle Filter and the Recovery Mechanism}
+\label{sec:amcl-math}
+
+AMCL maintains its belief about the robot's pose as a set of $N$
+weighted particles $\{(x^{(i)}, w^{(i)})\}_{i=1}^{N}$, each a
+concrete pose hypothesis, updated on every new odometry/LiDAR pair
+through the standard Monte Carlo localisation prediction-update-resample
+cycle \cite{thrun2005probabilistic}:
+
+\begin{enumerate}
+  \item \textbf{Prediction (motion model).} Each particle is
+    propagated forward using the commanded/odometric motion since the
+    last update, corrupted by noise whose magnitude is controlled by
+    the $\alpha_1$--$\alpha_4$ parameters mentioned in the component
+    list above (roughly: $\alpha_1$/$\alpha_2$ scale rotational noise
+    from the odometry's rotational and translational components
+    respectively, $\alpha_3$/$\alpha_4$ scale translational noise the
+    same way) -- larger values inject more particle spread per unit
+    of commanded motion, modelling greater distrust in odometry.
+  \item \textbf{Update (measurement model).} Each particle's weight
+    is set proportional to the likelihood of the actual LiDAR scan
+    given that particle's hypothesised pose and the static map,
+    typically via a likelihood-field model that scores each scan
+    endpoint by its proximity to the nearest mapped obstacle from that
+    hypothesised pose.
+  \item \textbf{Resampling.} A new particle set is drawn, with
+    replacement, with probability proportional to weight -- particles
+    consistent with the actual scan multiply, inconsistent ones are
+    discarded, and the particle cloud statistically converges toward
+    the true pose over repeated cycles. AMCL's ``adaptive'' element
+    (KLD-sampling) additionally varies $N$ itself between update
+    cycles, using fewer particles once the distribution is already
+    tightly converged and more while it remains spread out.
+\end{enumerate}
+
+The parameters directly responsible for the freeze failure mode
+documented in Section~\ref{sec:ruled-out} are a separate pair from
+the four motion-model $\alpha$s above:
+\texttt{recovery\_alpha\_slow}/\texttt{recovery\_alpha\_fast} govern
+an \emph{augmented} MCL recovery mechanism, tracking two exponential
+moving averages of the particle set's average weight -- a slow
+long-run average $\bar{w}_{\text{slow}}$ and a fast short-run average
+$\bar{w}_{\text{fast}}$, updated after every measurement step as
+
+\begin{equation}
+  \bar{w}_{\text{slow}} \mathrel{+}= \alpha_{\text{slow}}\left(\bar{w} - \bar{w}_{\text{slow}}\right), \qquad
+  \bar{w}_{\text{fast}} \mathrel{+}= \alpha_{\text{fast}}\left(\bar{w} - \bar{w}_{\text{fast}}\right),
+  \label{eq:amcl-recovery}
+\end{equation}
+
+where $\bar{w}$ is the current cycle's average particle weight. During
+resampling, instead of drawing every new particle from the existing
+weighted set, each new particle is drawn \emph{uniformly at random
+from the entire map} with probability $\max\!\left(0,\ 1 -
+\bar{w}_{\text{fast}}/\bar{w}_{\text{slow}}\right)$ -- intuitively, if
+recent particle quality ($\bar{w}_{\text{fast}}$) has dropped
+noticeably below the longer-run baseline ($\bar{w}_{\text{slow}}$),
+the filter injects fresh, unbiased hypotheses to help it recover from
+a bad convergence or a ``kidnapped robot'' scenario, rather than
+continuing to resample only from a particle set that may have already
+converged to the wrong pose. Setting
+$\alpha_{\text{slow}} = \alpha_{\text{fast}} = 0.0$ -- the value this
+project's simulation-tuned configuration originally inherited --
+means neither running average is ever updated from its initial value,
+so this random-injection probability is permanently fixed rather than
+responsive to real degradation in particle quality: on real,
+non-ideal sensor noise (unlike a clean simulation, where the filter
+rarely needs this recovery path at all), the particle set can
+converge overconfidently to an incorrect pose with no mechanism
+available to reintroduce diversity, which is the permanent freeze
+Section~\ref{sec:ruled-out} reports and fixes by raising these two
+parameters off zero.
+
+\section{The Quanser QCar Platform}
+\label{sec:qcar-platform}
+
+The physical platform underlying this thesis is the Quanser QCar, a
+1/10th-scale rear-wheel-drive, Ackermann-steered research vehicle
+\cite{quanser2022qcar2}. Its onboard compute is an NVIDIA Jetson TX2
+system-on-module (running Ubuntu 18.04 LTS with 32\,GB eMMC storage
+and Python~3.6.9), which ships with both ROS~1 Melodic and ROS~2
+Dashing pre-installed side by side, neither of which is auto-sourced
+in the default shell environment. Sensing is provided by a 2D LiDAR
+and an onboard IMU; drive and steering actuation are exposed through
+Quanser's own Hardware Abstraction Layer / Product Application Layer
+(HAL/PAL) Python library, which wraps the vehicle's motor, servo,
+encoder, and battery-monitoring hardware behind a \texttt{QCar}
+object exposing \texttt{read()}/\texttt{write()} calls and a small
+number of documented safety limits: PWM duty cycle is saturated to
+$\pm 30\%$ with a $100\%/\mathrm{s}$ rate limiter, the steering
+command range is $\pm 0.5$~rad against a physical limit of
+$\pm 0.5236$~rad ($\pm\ang{30}$), and an overcurrent protection state
+(triggered at 5\,A/8\,s, 10\,A/2\,s, or 15\,A/0.5\,s) forces the
+vehicle into a neutral mode until the underlying hardware-in-the-loop
+device is restarted. These limits are respected throughout every
+piece of drive-control code presented in this thesis.
+
+A property of the HAL library specific to this platform, and central
+to one of this thesis's most significant findings
+(Section~\ref{sec:readmode-bug}), is its two supported I/O modes:
+\emph{immediate I/O} (\texttt{readMode=0}), where each call to
+\texttt{read()} triggers a fresh hardware sample, and \emph{task-based
+I/O} (\texttt{readMode=1}), where a background acquisition task
+begins sampling into a fixed-depth ring buffer at object construction
+time, independently of when (or whether) the caller ever calls
+\texttt{read()}. This distinction is not merely an implementation
+detail; Chapter~\ref{ch:calibration} documents how it produced a
+measurement artefact large enough, and stable enough, to be
+repeatedly and reasonably misattributed to genuine vehicle physics
+before its true cause was found.
+
+\section{The Sim-to-Real Gap}
+\label{sec:sim-to-real-concept}
+
+The term \emph{sim-to-real gap} (or \emph{reality gap}) refers,
+broadly, to any systematic discrepancy between a robot's simulated
+and physical behaviour under nominally identical software and
+commands \cite{zhao2020sim2real}. Sources of this gap are commonly
+grouped into a few broad categories, all of which recur, in concrete
+and specific form, across this thesis's methodology chapters:
+
+\begin{itemize}
+  \item \textbf{Unmodelled or under-modelled physical effects} --
+    e.g.\ static friction / stiction, actuator response lag, or
+    non-linear actuator-to-output mappings that a simulator either
+    omits entirely or models only in idealised form. Chapter~\ref{ch:calibration}'s
+    throttle calibration and friction-deadband findings are a direct
+    instance of this category.
+  \item \textbf{Sensor and estimation differences} -- simulated
+    sensors are frequently noiseless or near-noiseless and
+    perfectly time-synchronised with the simulation clock, whereas
+    physical sensors carry real noise, real latency, and, in a
+    distributed system, real inter-process clock skew.
+    Chapter~\ref{ch:hardware-bridge}'s clock-offset and LiDAR
+    angle-convention fixes fall into this category.
+  \item \textbf{Software/communication-layer differences} -- a
+    simulated robot typically runs its entire software stack as
+    co-located ROS~2 processes on one machine; a physical robot may
+    be split across incompatible middleware versions, unreliable
+    wireless links, or (as found directly in this project) firmware-
+    or driver-level buffering that a simulation has no equivalent of
+    at all. Chapters~\ref{ch:hardware-bridge}
+    and~\ref{ch:calibration} both document findings in this
+    category.
+\end{itemize}
+
+A methodological point that recurs throughout this thesis, and is
+made explicit here because it shapes every later chapter's approach,
+is that these categories are not always distinguishable from the
+symptom alone. A fixed-duration, speed-independent delay between a
+software command and its physical effect is, from a black-box
+measurement standpoint, equally consistent with drivetrain coasting
+(a physical-effect explanation), a command-delivery lag in the bridge
+software (a communication-layer explanation), or, as this thesis's
+own investigation ultimately found, a stale-data artefact in a sensor
+read path (a sensor/estimation-layer explanation that happens to
+mimic a physical one almost exactly). Distinguishing between these
+required, in every case documented in this thesis, going beyond the
+symptom to a direct measurement or source-level inspection of the
+specific layer under suspicion -- a theme Chapter~\ref{ch:calibration}
+returns to explicitly.

@@ -1,0 +1,250 @@
+\chapter{Results}
+\label{ch:results}
+
+This chapter consolidates the quantitative results produced across
+Chapters~\ref{ch:sim-stack}--\ref{ch:nav-integration} and evaluates
+them directly against the target state defined in
+Section~\ref{sec:problem-statement}: a Nav2 navigation stack that
+reaches goal poses reliably on the physical QCar, with the
+sim-to-real gap identified and, where practical, corrected. Results
+are presented here without re-opening their diagnosis; interpretation
+and generalisation are deferred to Chapter~\ref{ch:summary}.
+
+\section{Actuator Calibration Accuracy}
+\label{sec:results-throttle}
+
+Table~\ref{tab:results-throttle-summary} restates the throttle
+calibration validation of Section~\ref{sec:final-calibration}
+alongside the uncalibrated baseline it replaced.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Commanded-versus-real cruise speed, before and after calibration.}
+  \label{tab:results-throttle-summary}
+  \begin{tabular}{@{}p{3.2cm}p{5.8cm}p{5.5cm}@{}}
+    \toprule
+    Commanded speed & Baseline ratio (uncalibrated $\text{THROTTLE\_GAIN}=1/3$) & Calibrated ratio (Eq.~\ref{eq:throttle-calibration}) \\
+    \midrule
+    \SI{0.3}{\meter\per\second} & $\approx$2.6--2.7 & 1.05 \\
+    \SI{0.4}{\meter\per\second} & -- (not separately measured) & 1.05 \\
+    \SI{0.5}{\meter\per\second} & -- (not separately measured) & 1.00 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The commanded-to-real speed ratio was reduced from
+$\approx$2.6--2.7$\times$ to within 5\% across the
+\SIrange{0.3}{0.5}{\meter\per\second} range validated. Below
+$\approx$\SI{0.25}{\meter\per\second}, both the calibrated and
+uncalibrated mappings are unreliable in an open-loop sense, since the
+vehicle's static-friction deadband (Section~\ref{sec:deadband-discovery})
+sits in that range independently of gain calibration; commanding
+\SI{0.2}{\meter\per\second} moved the vehicle in only some trials.
+
+\section{Stop-Distance and Latency}
+\label{sec:results-stop-distance}
+
+Table~\ref{tab:results-stop-distance} restates the
+\texttt{readMode=0} fix's effect (Section~\ref{sec:readmode-validation})
+across all five tested conditions, alongside the residual physical
+explanation for what remains.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Stop-latency and extra-distance results, before and after the \texttt{readMode=0} fix.}
+  \label{tab:results-stop-distance}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Test condition & Stiction delay & Extra distance & Stop latency \\
+    & (before $\to$ after) & (before $\to$ after) & (before $\to$ after) \\
+    \midrule
+    \SI{2}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.09}{0.117}{\second} & \SIrange{0.520}{0.114}{\meter} & \SIrange{2.37}{0.598}{\second} \\
+    \SI{2}{\meter} @ \SI{0.4}{\meter\per\second} & \SIrange{2.14}{0.001}{\second} & \SIrange{0.790}{0.114}{\meter} & \SIrange{2.40}{0.501}{\second} \\
+    \SI{2}{\meter} @ \SI{0.5}{\meter\per\second} & \SIrange{2.14}{0.116}{\second} & \SIrange{0.923}{0.154}{\meter} & \SIrange{2.55}{0.550}{\second} \\
+    \SI{1}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.14}{0.120}{\second} & \SIrange{0.641}{0.118}{\meter} & \SIrange{2.44}{0.572}{\second} \\
+    \SI{3}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.08}{0.088}{\second} & \SIrange{0.583}{0.104}{\meter} & \SIrange{2.35}{0.509}{\second} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Mean stiction delay across the five post-fix conditions is
+$\approx$\SI{0.09}{\second} (down from $\approx$\SI{2.12}{\second}),
+mean extra distance is $\approx$\SI{0.12}{\meter} (down from
+$\approx$\SI{0.69}{\meter}), and mean stop latency is
+$\approx$\SI{0.55}{\second} (down from $\approx$\SI{2.42}{\second}).
+The post-fix residual is not further reducible with the current
+open-loop throttle model: dividing extra distance by stop latency
+recovers \SIrange{54}{61}{\percent} of cruise velocity in four of the
+five conditions, consistent with an ordinary, roughly linear velocity
+decay to zero over the measured latency window (a perfectly linear
+decay predicts exactly 50\%), rather than indicating any further
+unexplained delay mechanism.
+
+\section{Sim-versus-Real Overshoot}
+\label{sec:results-sim-vs-real}
+
+Table~\ref{tab:results-sim-vs-real} restates the sim-versus-real
+comparison of Section~\ref{sec:sim-vs-real}. Because this comparison
+was run \emph{before} both the throttle calibration
+(Section~\ref{sec:throttle-calibration}) and the buffering-defect fix
+(Section~\ref{sec:readmode-bug}), it is reported here as the gap that
+existed at that stage of the project, not as the final residual gap
+between simulation and hardware -- Sections~\ref{sec:results-throttle}
+and~\ref{sec:results-stop-distance} above are the corresponding
+final, post-fix figures, but a matched six-point sim-versus-real
+sweep was not re-run after both fixes were in place.
+% TODO: if lab time allows, re-running the exact six-point sweep from
+% Sec. 5.4 post-fix would let this results chapter report a genuine
+% final sim-to-real gap number rather than only a pre-fix one.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Sim-versus-real stop-distance overshoot (measured before the fixes of Ch.~5).}
+  \label{tab:results-sim-vs-real}
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    & Simulation & Real hardware \\
+    \midrule
+    Overshoot range (six-point sweep) & \SIrange{0.044}{0.067}{\meter} & \SIrange{0.58}{2.12}{\meter} \\
+    Isolated \SI{2}{\meter}@\SI{0.3}{\meter\per\second} test & \SI{0.067}{\meter} extra & \SI{1.90}{\meter} extra \\
+    Ratio (real / sim), isolated test & \multicolumn{2}{c}{$\approx$28$\times$} \\
+    Speed sensitivity & weak & strong ($\propto v^3$, approximately) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Steering Response Accuracy}
+\label{sec:results-steering}
+
+Table~\ref{tab:results-steering-summary} restates the steering-gain
+validation of Section~\ref{sec:steering-gain}, isolating the
+multiplicative gain error from the zero-point trim already covered by
+Section~\ref{sec:results-throttle}'s companion actuator.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Real wheel deflection versus kinematically commanded deflection, before and after \texttt{STEERING\_GAIN} correction.}
+  \label{tab:results-steering-summary}
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    & Uncorrected (gain$=1$) & Corrected (\texttt{STEERING\_GAIN}$=1.39$) \\
+    \midrule
+    Residual error vs.\ kinematic prediction & $\approx$39\% & $\approx$5.6\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+As with the throttle mapping, this is a per-unit, empirically fitted
+correction rather than a property derivable from the vehicle's nominal
+kinematic model alone -- a second, independent confirmation of this
+thesis's broader finding that the QCar's actual actuator response
+cannot be assumed to match its documented/kinematic specification
+without direct measurement.
+
+\section{Navigation Robustness in Tight Spaces}
+\label{sec:results-cusp}
+
+Table~\ref{tab:results-cusp-summary} restates
+Section~\ref{sec:cusp-freeze}'s K-turn/reversal-cusp results: the
+representative corridor reproduction goal's manoeuvre duration and
+recovery count, across the untouched baseline and the final,
+corner-extending \texttt{CuspStraightenerSmoother} configuration.
+
+\begin{table}[htbp]
+  \centering
+  \caption{K-turn manoeuvre duration and recovery count, before and after the cusp-straightening smoother (simulation, three trials each).}
+  \label{tab:results-cusp-summary}
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    & Baseline (no smoother) & Final config (smoother + corner extension) \\
+    \midrule
+    Mean duration & \SI{110.2}{\second} & \SI{43.9}{\second} \\
+    Mean recoveries per trial & 2.0 & 0.0 \\
+    Worst-case duration & \SI{168.1}{\second} & \SI{48.1}{\second} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+This is corroborated, not merely repeated, by real-hardware testing:
+two independently sent goals on the physical vehicle, each requiring a
+genuine reversal manoeuvre, both succeeded with zero recoveries
+(Section~\ref{sec:cusp-hw-validation}) -- a stronger form of validation
+than the simulation trial count alone, since it confirms the fix
+transfers to real sensor noise, real actuator response, and real
+planner behaviour on unseen goal geometry, not only the specific
+corridor reproduction it was developed against. The one qualification
+recorded against this result is that individual replans on real
+hardware occasionally showed substantially higher cusp counts
+(up to 8--10) than any simulation trial produced (maximum
+$\approx$3) -- both hardware goals still succeeded despite this, so it
+is reported as an open, unexplained gap between simulated and real
+replanning behaviour rather than a limitation of the fix itself.
+
+\section{Navigation Goal-Reaching}
+\label{sec:results-goal-reaching}
+
+Closed-loop \texttt{navigate\_to\_pose} goals requiring both straight
+driving and real turning were completed successfully on the physical
+QCar on multiple occasions across this project, confirmed both by
+\texttt{bt\_navigator}'s own \texttt{Goal succeeded} status and, in
+the final validation of Section~\ref{sec:final-validation}, by the
+operator's direct observation that localisation tracked the vehicle's
+real motion closely throughout the goal, rather than exhibiting the
+map-shift artefact of Section~\ref{sec:display-lag}. The one
+navigation timing measurement available (Table~\ref{tab:display-lag})
+was taken under the pre-\texttt{readMode=0} bridge configuration and
+should be read as an upper bound on the true post-fix pipeline
+latency and stop-coast behaviour during a live goal, not as the final
+figure, per the caveat in Section~\ref{sec:display-lag-interpretation}.
+
+\section{Applicability of the Results}
+\label{sec:results-applicability}
+
+\subsection{Beyond This Specific QCar Unit}
+\label{sec:applicability-unit}
+
+The throttle deadband/gain values (Equation~\ref{eq:throttle-calibration})
+and the steering-trim value (Section~\ref{sec:steering-trim}) are
+per-unit calibration constants, expected to differ, potentially
+substantially, on a different physical QCar chassis, or even on
+this same chassis under different tyre wear, floor surface, or
+battery charge conditions -- the calibration explicitly found this
+floor to drift within a single session (Section~\ref{sec:deadband-discovery}).
+The \emph{method} used to find them -- an empirical fixed-duty sweep
+under real load, rather than an analytically derived or single-point
+gain estimate -- is expected to transfer directly to any similarly
+actuated small-scale ground vehicle, independent of the specific
+numeric result.
+
+\subsection{Beyond the QCar Platform}
+\label{sec:applicability-platform}
+
+The \texttt{readMode} buffering defect (Section~\ref{sec:readmode-bug})
+is specific to the Quanser HAL's task-based I/O mode, but the general
+failure class it represents -- a background acquisition task started
+at object-construction time, with a read-consumption rate that
+happens to match its production rate closely enough that a
+start-up-gap backlog never drains -- is a generic ring-buffer hazard
+that is not specific to this vendor's library, and is worth checking
+for in any hardware abstraction layer offering a buffered or
+task-based I/O mode as an alternative to immediate/polled reads,
+particularly where the buffer is initialised eagerly rather than on
+first read. The diagnostic principle that resolved it -- when an
+internally self-consistent software abstraction (here, the
+\texttt{Odometry} class) produces a value that contradicts direct
+physical observation, verify the abstraction's own \emph{input}, not
+only its internal consistency -- is a general debugging principle,
+not specific to this project at all.
+
+\subsection{Beyond Navigation}
+\label{sec:applicability-domain}
+
+The active-braking safety incident (Section~\ref{sec:active-braking})
+and its resolution generalise directly to any reactive
+feedback-control design intended for direct hardware deployment on a
+system with confirmed actuator lag or inertia, regardless of
+application domain: this project's standing rule -- trace new
+reactive control logic through by hand for an overshoot scenario, or
+validate it in simulation, before it reaches a physical actuator --
+is a general control-engineering caution reinforced, not discovered,
+by this project's own experience.
