@@ -1,13 +1,6 @@
 \chapter{Navigation Integration and Validation}
 \label{ch:nav-integration}
 
-% TODO: this chapter's final section (6.5) reports a QUALITATIVE
-% end-to-end result ("working almost perfectly") without a fresh
-% quantitative monitor_goal_timing.py re-run post-readMode-fix. If you
-% can still get lab time on the QCar, re-running that tool and
-% dropping the numbers into Table 6.2 (currently a TODO) would close
-% the one open loop in this thesis's results and make Ch. 7 stronger.
-
 This chapter describes bringing the full Nav2 navigation stack up
 against the physical QCar, building on the bridge of
 Chapter~\ref{ch:hardware-bridge} and the calibration of
@@ -17,7 +10,7 @@ Section~\ref{sec:mppi-critic} describes a custom MPPI critic plugin
 developed for this vehicle. Section~\ref{sec:phased-integration}
 reports the phased bring-up used to de-risk the integration.
 Section~\ref{sec:display-lag} presents a detailed timing
-investigation into an apparent localisation-display artefact, and
+investigation into an apparent localisation-display artefact.
 Section~\ref{sec:final-validation} reports the resulting end-to-end
 validation.
 
@@ -28,44 +21,76 @@ The Nav2 parameter set developed and tuned in simulation
 (Chapter~\ref{ch:sim-stack}) required a small, mechanical set of
 changes to run against physical hardware rather than Gazebo: every
 occurrence of \texttt{use\_sim\_time} (13 in total, across the
-costmap, planner, controller, and AMCL parameter blocks) was switched
+costmap, planner, controller and AMCL parameter blocks) was switched
 from \texttt{true} to \texttt{false}, since the physical robot has no
 simulation clock to synchronise against. Both mapping and navigation
 launch files were given a real-hardware branch, gated on
-\texttt{launch\_sim}, alongside the existing Gazebo branch, with
-real hardware as the default and simulation opt-in
-(\texttt{launch\_sim:=true}) -- a deliberate inversion of which mode
-is the default, made once hardware became the project's active
-development target, while keeping the simulation path fully intact
-for future regression testing rather than removing it.
+\texttt{launch\_sim}, alongside the existing Gazebo branch. Real
+hardware is now the default, with simulation as an opt-in
+(\texttt{launch\_sim:=true}) -- a deliberate inversion made once
+hardware became the project's active development target. The
+simulation path was kept fully intact for future regression testing
+rather than removed.
+Figure~\ref{fig:nav2-launch-flowchart} traces the resulting launch
+sequence for this now-default hardware branch. It runs from the
+manual, pre-launch bring-up of the onboard bridge and relay
+(Chapter~\ref{ch:hardware-bridge}), through the top-level
+\texttt{ros2 launch} invocation, to the localisation and navigation
+lifecycle managers reaching \texttt{active}. Three processes must
+already be running before this launch file is even invoked:
+\texttt{qcar\_bridge.py} and \texttt{qcar\_lidar\_node.py} on the QCar
+itself and \texttt{qcar\_relay\_node.py} on the development PC. None
+of these are started by \texttt{qcar\_nav2.launch.py}. The simulation
+branch (\texttt{launch\_sim:=true}) instead starts Gazebo,
+\texttt{robot\_state\_publisher} and \texttt{spawn\_entity.py}
+directly from within the same launch file and needs no such manual
+step -- at the cost of every sensor/odometry topic coming from a
+simulated plugin rather than the real hardware bridge.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/nav2-launch-flowchart-hardware.png}
+  \caption[Launch dependency graph of \texttt{qcar\_nav2.launch.py} (hardware branch)]{The launch dependency graph of
+    \texttt{qcar\_nav2.launch.py}'s hardware branch (\texttt{launch\_sim:=false},
+    the default since 2026-08-10): the manual, pre-launch bring-up of
+    the onboard bridge and relay (top), \texttt{qcar\_visualize.launch.py}'s
+    TF/RViz bring-up with no Gazebo involved (left), the timed
+    \texttt{nav2\_bringup} include (centre) and the
+    \texttt{RewrittenYaml}-configured parameter file and hardware map
+    selection (right) converge on \texttt{nav2\_bringup}'s own
+    \texttt{localization\_launch.py}/\texttt{navigation\_launch.py},
+    each bringing its lifecycle manager to \texttt{active} before the
+    stack is ready to accept a goal.}
+  \label{fig:nav2-launch-flowchart}
+\end{figure}
 
 The AMCL \texttt{recovery\_alpha\_fast}/\texttt{recovery\_alpha\_slow}
-fix from Section~\ref{sec:ruled-out} was carried forward
-proactively into the hardware configuration at this point, rather
-than left to be independently rediscovered against hardware, since
-the underlying cause -- Section~\ref{sec:amcl-math}'s augmented-MCL
-random-particle-injection mechanism being permanently disabled at
-$\alpha_{\text{slow}} = \alpha_{\text{fast}} = 0$, leaving the filter
-with no way to recover from an overconfident convergence once real
-sensor noise (which a clean simulation rarely exercises) triggers one
--- is a property of AMCL's own resampling algorithm, not specific to
-any one deployment target.
+fix from Section~\ref{sec:ruled-out} was carried forward proactively
+into the hardware configuration at this point, rather than left to be
+independently rediscovered against hardware. The underlying cause is
+a property of AMCL's own resampling algorithm, not specific to any
+one deployment target: Section~\ref{sec:amcl-math}'s augmented-MCL
+random-particle-injection mechanism is permanently disabled at
+$\alpha_{\text{slow}} = \alpha_{\text{fast}} = 0$. This leaves the
+filter with no way to recover from an overconfident convergence once
+real sensor noise (which a clean simulation rarely exercises)
+triggers one.
 
-\section{Custom MPPI Critic: \texttt{EarlyCommitCritic}}
+\section{The Custom MPPI Critic \texttt{EarlyCommitCritic}}
 \label{sec:mppi-critic}
 
 Early navigation testing showed a specific weakness in the stock MPPI
-critic set (Section~\ref{sec:nav2}) for this vehicle: the standard
+critic set (Section~\ref{sec:nav2}) for this vehicle. The standard
 path-following critics evaluate a sampled trajectory's alignment and
 progress against the path as a whole, which can leave the controller
 driving further into an approaching curve before it begins reacting
-to it, rather than beginning the turn as early as physically sensible
--- a behaviour more forgiving for a differential-drive robot's tight
-turning radius than for an Ackermann-steered vehicle with the
+to it, rather than beginning the turn as early as physically sensible.
+This behaviour is more forgiving for a differential-drive robot's
+tight turning radius than for an Ackermann-steered vehicle with the
 finite minimum turning radius of Table~\ref{tab:qcar-geometry}.
 
 A custom MPPI critic plugin, \texttt{EarlyCommitCritic}, was
-developed and built into the navigation package to address this: it
+developed and built into the navigation package to address this. It
 scores only the first \texttt{early\_time\_steps} of each sampled
 trajectory rollout against the bearing to a near-term path point,
 with no distance or angle gating, so that MPPI is pushed to begin
@@ -81,24 +106,24 @@ bearing calculation would otherwise fight the vehicle's intended
 direction of travel.
 
 Building this plugin required matching \texttt{xtensor}/\texttt{xsimd}
-compile definitions exactly against Nav2's own MPPI controller build
--- a mismatch here does not produce a compile-time error, but a
-silent ABI incompatibility that crashes the navigation container on
-the first control cycle that touches vectorised critic math, making
-it a notably unforgiving class of build-configuration bug to diagnose
-from its symptom alone.
+compile definitions exactly against Nav2's own MPPI controller build.
+A mismatch here does not produce a compile-time error. Instead it
+causes a silent ABI incompatibility that crashes the navigation
+container on the first control cycle that touches vectorised critic
+math, making it a notably unforgiving class of build-configuration
+bug to diagnose from its symptom alone.
 
 Listing~\ref{lst:early-commit-critic} shows the critic's
 \texttt{score()} method in full. It computes the bearing from each
 sampled trajectory's own starting position to a near-term path target
 (\texttt{offset\_from\_furthest} points ahead of the furthest point
-the robot has already reached), then, for only the first
-\texttt{early\_time\_steps} of that trajectory, accumulates the
-angular distance between the trajectory's actual yaw and that
-bearing -- scoring every sampled rollout independently, not just the
-robot's single current pose. The early return on
+the robot has already reached). For only the first
+\texttt{early\_time\_steps} of that trajectory, it then accumulates
+the angular distance between the trajectory's actual yaw and that
+bearing. This scores every sampled rollout independently, not just
+the robot's single current pose. The early return on
 \texttt{active\_path\_points} is what confines this to the start of a
-path, and the \texttt{forward\_preference\_}-gated minimum of the
+path. The \texttt{forward\_preference\_}-gated minimum of the
 forward- and reverse-bearing angular distances is the
 direction-awareness refinement mentioned above, letting a trajectory
 be scored against whichever of the bearing or its reverse it is
@@ -151,8 +176,8 @@ void EarlyCommitCritic::score(CriticData & data)
 \paragraph{How this cost actually changes which trajectory wins.}
 Connecting this directly to Section~\ref{sec:mppi-math}'s softmax
 weighting (Equation~\ref{eq:mppi-weight}): \texttt{data.costs} is the
-same per-trajectory accumulator every enabled critic adds into, so
-this critic's contribution
+same per-trajectory accumulator every enabled critic adds into. This
+critic's contribution
 $\left(\overline{\Delta\theta} \cdot \texttt{weight\_}\right)^{\texttt{power\_}}$
 (the early-steps-averaged angular difference $\overline{\Delta\theta}$
 from the listing's \texttt{cost} variable, scaled and exponentiated by
@@ -162,17 +187,18 @@ Equation~\ref{eq:mppi-weight}'s exponential weighting is applied.
 Concretely: of two sampled trajectories approaching the same curve,
 one that begins turning toward the near-term path point immediately
 accrues a small $\overline{\Delta\theta}$ over its first
-\texttt{early\_time\_steps}, while one that continues driving straight
-before reacting accrues a much larger one -- inflating that second
-trajectory's total cost $S(\tau^{(k)})$, which Equation~\ref{eq:mppi-weight}
-translates into an \emph{exponentially} smaller importance weight
-$w^{(k)}$ relative to the early-turning trajectory. Because the
+\texttt{early\_time\_steps}, while one that continues driving
+straight before reacting accrues a much larger one. This inflates
+that second trajectory's total cost $S(\tau^{(k)})$, which
+Equation~\ref{eq:mppi-weight} translates into an \emph{exponentially}
+smaller importance weight $w^{(k)}$ relative to the early-turning
+trajectory. Because the
 executed control is the weight-averaged sum over all $K$ sampled
-trajectories, systematically suppressing the weight of every
-late-turning sample -- rather than merely marking one specific
-trajectory as disqualified -- is what actually shifts the controller's
-averaged output toward beginning the turn earlier, without ever
-needing to identify or select a single ``best'' trajectory explicitly.
+trajectories, what actually shifts the controller's averaged output
+toward beginning the turn earlier is the systematic suppression of
+every late-turning sample's weight. This is not the same as marking
+one specific trajectory as disqualified; no single ``best'' trajectory
+ever needs to be identified or selected explicitly.
 
 \section{Phased Hardware Integration}
 \label{sec:phased-integration}
@@ -180,7 +206,7 @@ needing to identify or select a single ``best'' trajectory explicitly.
 Given the number of independent subsystems involved (TCP bridge,
 odometry, SLAM, localisation, planning, control), integration
 proceeded in three deliberately staged phases rather than attempting
-the full stack at once, so that a failure at any stage could be
+the full stack at once. This way, a failure at any stage could be
 attributed to a bounded set of newly-added components rather than the
 entire system:
 
@@ -209,33 +235,120 @@ entire system:
     as the vehicle model producing them.
 \end{description}
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/hardware-map-first.png}
+  \caption[The Phase~2 occupancy grid from real LiDAR data]{The Phase~2 occupancy grid, built from real LiDAR data
+    while driving the physical QCar under teleoperation and saved via
+    \texttt{map\_saver\_cli} -- the same map used for all subsequent
+    hardware localisation and navigation testing. RViz's own
+    navigation panel (left) reports a goal reached with zero
+    recoveries.}
+  \label{fig:hardware-map-first}
+\end{figure}
+
 The full stack's initial bring-up -- motor bridge, LiDAR node, relay
-node, and the ported Nav2 launch configuration -- came up cleanly on
-the first attempt against the saved Phase~2 map: both Nav2 lifecycle
+node and the ported Nav2 launch configuration -- came up cleanly on
+the first attempt against the saved Phase~2 map. Both Nav2 lifecycle
 managers reported their managed nodes active, all seven configured
 MPPI critics (the stock six plus \texttt{EarlyCommitCritic}) loaded
-matching the intended configuration, and the costmap auto-sized
+matching the intended configuration and the costmap auto-sized
 correctly to the saved map's dimensions, with no crash loop. A real
-navigation goal was deliberately not sent during this first bring-up,
-since dead-reckoning odometry -- and therefore everything built on
-top of it, including AMCL and planning -- is only as trustworthy as
-the still-unresolved steering-trim calibration at that point in the
-project's timeline; that calibration (Section~\ref{sec:steering-trim})
+navigation goal was deliberately not sent during this first bring-up.
+Dead-reckoning odometry, along with everything built on top of it
+including AMCL and planning, is only as trustworthy as the
+still-unresolved steering-trim calibration at that point in the
+project's timeline. This calibration (Section~\ref{sec:steering-trim})
 was completed before the first real goal was attempted.
+Figure~\ref{fig:full-stack-running} shows the same launch
+configuration and lifecycle sequence (Section~\ref{sec:nav2-porting})
+exercised end-to-end on its still-maintained simulation branch. It
+captures, in one session, the terminal log's lifecycle transitions
+(top right), the RViz plan and live navigation feedback panel (left)
+and the Gazebo-side view of the vehicle executing the goal (bottom
+right). This is the same bring-up recipe the hardware branch above
+shares, shown here with every stage of the stack visible at once.
 
-\section{A K-Turn Freeze at Reversal Cusps: Diagnosis and a Custom Smoother}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/full-stack-running.png}
+  \caption[The Nav2 stack running end-to-end in simulation]{The Nav2 stack running end-to-end on the simulation branch
+    of the same launch configuration: bring-up log (top right, showing
+    each server and lifecycle manager activating in turn), RViz with
+    the global plan and live navigation feedback panel (left) and the
+    simulated vehicle executing the goal (bottom right).}
+  \label{fig:full-stack-running}
+\end{figure}
+
+\subsection{First Real-Hardware Goals in Left- and Right-Turn Trials}
+\label{sec:first-real-turns}
+
+With Phase~3's bring-up clean and the steering-trim calibration in
+place, the first real navigation goals sent to the physical vehicle
+were deliberately simple: a single corridor turn each, rather than a
+full reversal manoeuvre. Two trials were run, one requiring a left turn and one a right turn, each
+sending the vehicle forward out of the corridor junction and into a
+stop against the side wall of the corresponding side corridor
+(Section~\ref{sec:cusp-freeze} covers the reversal manoeuvres that
+followed).
+Figures~\ref{fig:turn-right-sim}--\ref{fig:turn-left-hardware-photo}
+show the RViz path and the physical outcome for each.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/turn-right-sim.jpg}
+  \caption[RViz during the right-turn trial]{RViz during the right-turn trial: the global plan (green)
+    curves the vehicle out of the corridor junction towards the goal,
+    with the navigation feedback panel (left) reporting distance
+    remaining and elapsed time as the turn is executed.}
+  \label{fig:turn-right-sim}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/turn-right-hardware-photo.jpg}
+  \caption[The QCar at the end of the right-turn trial]{The physical QCar at the end of the right-turn trial,
+    stopped in front of the wall at the far side of the junction.}
+  \label{fig:turn-right-hardware-photo}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/turn-left-sim.jpg}
+  \caption[RViz during the left-turn trial]{RViz during the left-turn trial: the navigation feedback
+    panel reports \emph{Feedback: reached} with zero distance
+    remaining at the end of the curved approach.}
+  \label{fig:turn-left-sim}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/turn-left-hardware-photo.jpg}
+  \caption[The QCar at the end of the left-turn trial]{The physical QCar at the end of the left-turn trial,
+    stopped against the side wall of the corridor junction.}
+  \label{fig:turn-left-hardware-photo}
+\end{figure}
+
+Both trials succeeded, with the vehicle reaching its goal and stopping
+against the intended wall in each case. This was the first
+confirmation that the calibrated bridge (Chapter~\ref{ch:hardware-bridge})
+and Phase~3 stack could execute a real, AMCL-localised turn on
+hardware at all, before the more demanding reversal manoeuvres of the
+next section were attempted.
+
+\section{Diagnosing a K-Turn Freeze at Reversal Cusps with a Custom Smoother}
 \label{sec:cusp-freeze}
 
 Beyond the display-latency and calibration issues of the preceding
 sections, real-hardware testing in tight spaces surfaced a distinct
-and more serious navigation problem: a goal requiring the vehicle to
-turn around produced, in the operator's words, ``a chaotic curve, then
-reverse with opposite curve, then forward curve'' -- a visibly
-hesitant, multi-second freeze at the direction change -- rather than a
-clean, continuous K-turn. This section documents the diagnosis,
-several fix attempts that failed instructively, and a custom smoother
-plugin that resolved it, validated in both simulation and on the
-physical vehicle.
+and more serious navigation problem. A goal requiring the vehicle to
+turn around produced, in my own words at the time, ``a chaotic curve, then
+reverse with opposite curve, then forward curve.'' The result was a
+visibly hesitant, multi-second freeze at the direction change, rather
+than a clean, continuous K-turn. This section documents the
+diagnosis, several fix attempts that failed instructively and a
+custom smoother plugin that resolved it. The smoother was validated
+in both simulation and on the physical vehicle.
 
 \subsection{Reproduction}
 \label{sec:cusp-repro}
@@ -244,45 +357,61 @@ To investigate safely and repeatably, a narrow dead-end corridor
 (approximately \SI{2.4}{\meter} wide, \SI{2}{\meter} deep) was added to
 the simulation map by re-mapping the Gazebo world of
 Chapter~\ref{ch:sim-stack} and saving a fresh occupancy grid via
-\texttt{map\_saver\_cli}, then sending a \texttt{NavigateToPose} goal
-deep inside it with a reversed final heading -- a target that forces a
+\texttt{map\_saver\_cli}. A \texttt{NavigateToPose} goal was then sent
+deep inside it with a reversed final heading, a target that forces a
 K-turn in a space too tight to complete it in one continuous arc.
-Two logging tools were built for this investigation:
-one recording every \texttt{/plan} message (not only the first, so
-that every replan issued during a recovery cycle gets its own
-sequence-numbered trace), \texttt{/odom}, and \texttt{/cmd\_vel} to
-timestamped CSVs, and a companion analysis script computing total
-manoeuvre duration, position-stagnation windows (freeze detection),
-and true steering-direction-reversal counts directly from those CSVs.
+Two logging tools were built for this investigation. One recorded
+every \texttt{/plan} message (not only the first, so that every
+replan issued during a recovery cycle gets its own sequence-numbered
+trace), \texttt{/odom} and \texttt{/cmd\_vel} to timestamped CSVs. A
+companion analysis script then computed total manoeuvre duration,
+position-stagnation windows (freeze detection) and true
+steering-direction-reversal counts directly from those CSVs.
+Figure~\ref{fig:cusp-rviz-plan} shows the reproduction goal's planned
+path in RViz: the global plan (green) folding back on itself at the
+cusp vertex, with the short executed segment (orange/red) that manages
+to complete before the freeze sets in.
 
-\subsection{Diagnosis: The Planner Is Correct, the Controller Is Not}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/cusp-rviz-plan.png}
+  \caption[The reproduction goal's reversal cusp in RViz]{The reproduction goal's cusp in RViz: the global
+    \texttt{/plan} (green) reverses direction at a single vertex. The
+    short executed segment (orange/red) shows how little of the
+    reversal leg is actually completed before the freeze.}
+  \label{fig:cusp-rviz-plan}
+\end{figure}
+
+\subsection{A Diagnosis Where the Planner Is Correct and the Controller Is Not}
 \label{sec:cusp-diagnosis}
 
 Reconstructing the vehicle's true chassis heading through the
 manoeuvre (motion direction minus \ang{180} after the cusp, verified
-against a independent bicycle-model simulation of a three-point turn)
+against an independent bicycle-model simulation of a three-point turn)
 confirmed that \texttt{SmacPlannerHybrid} was producing a kinematically
-correct global plan: heading rotates smoothly and monotonically
+correct global plan. Heading rotates smoothly and monotonically
 through the single Reeds--Shepp cusp the plan contains, exactly the
 ``flip steering side to continue rotating the same way'' geometry a
 real K-turn requires. The freeze is not a planning defect at all --
 it is entirely in \emph{execution}.
 
 The root cause lies in \texttt{nav2\_mppi\_controller}'s path-handling
-logic (\texttt{path\_handler.cpp}, Humble branch): MPPI is only ever
-shown the global plan truncated up to the cusp pose until a function
-called \texttt{isWithinInversionTolerances()} reports that the vehicle
-has reached that pose within \emph{both} a position tolerance and a
-heading tolerance simultaneously -- until then, none of the path
+logic (\texttt{path\_handler.cpp}, Humble branch). MPPI is only ever
+shown the global plan truncated up to the cusp pose, until a function
+called \texttt{isWithinInversionTolerances()} reports that the
+vehicle has reached that pose within \emph{both} a position tolerance
+and a heading tolerance simultaneously. Until then, none of the path
 beyond the cusp exists as far as the controller's own path-following
 critics are concerned, so nothing in the cost function encourages
-progress through it. This is structurally the same failure mode as a
-final-goal reorientation freeze found and fixed earlier in this
-project's tuning history, outside the scope of this thesis's own
-narrative: a goal requiring a large final heading change would stall
-in the same way, for the same reason, and was resolved simply by
-raising \texttt{GoalAngleCritic}'s cost weight (from 3.0 to 10.0) so
-the controller is pushed to complete the final heading precisely. No
+progress through it.
+
+This is structurally the same failure mode as a final-goal
+reorientation freeze found and fixed earlier in this project's tuning
+history, outside the scope of this thesis's own narrative. A goal
+requiring a large final heading change would stall in the same way,
+for the same reason. It was resolved simply by raising
+\texttt{GoalAngleCritic}'s cost weight (from 3.0 to 10.0), so the
+controller is pushed to complete the final heading precisely. No
 equivalent encouragement exists for an \emph{intermediate} cusp pose,
 which is exactly where this freeze occurs.
 
@@ -297,21 +426,21 @@ underlying lesson:
   \item \textbf{Widening \texttt{isWithinInversionTolerances()}'s own
     position and heading tolerances} (from \SI{0.2}{\meter}/\SI{0.4}{\radian}
     to \SI{0.4}{\meter}/\SI{0.7}{\radian}) made things worse: the
-    controller now reported the cusp ``reached'' too loosely, and the
+    controller now reported the cusp ``reached'' too loosely. The
     resulting premature reveal of the post-cusp path triggered
     six or more \texttt{progress\_checker} aborts before the vehicle
     had even physically reached the cusp.
   \item \textbf{Faster stuck-detection} (lowering
     \texttt{progress\_checker}'s movement-time allowance from
     \SI{30}{\second} to \SI{8}{\second}) fired aborts every
-    \SIrange{8}{13}{\second} -- faster than the manoeuvre could
-    genuinely complete -- and once triggered a \texttt{BackUp}
+    \SIrange{8}{13}{\second}, faster than the manoeuvre could
+    genuinely complete. It once triggered a \texttt{BackUp}
     recovery action that itself failed outright for lack of room in
     the corridor.
   \item \textbf{A first-version path-smoother} that re-projected the
     path onto a straight line for a fixed distance after each cusp,
     then jumped instantly back to the original curve, performed worse
-    still (never completing within a \SI{108}{\second} window): the
+    still (never completing within a \SI{108}{\second} window). The
     plugin's own logic worked exactly as designed, but the hard
     discontinuity it introduced at the blend boundary was itself a new
     obstacle for the controller.
@@ -328,33 +457,34 @@ manoeuvre worse, never better.}
 
 A second design, \texttt{CuspStraightenerSmoother}, was built as a
 \texttt{nav2\_core::Smoother} plugin -- path post-processing rather
-than a controller-side change -- with two deliberate constraints: it
-acts \emph{only} on cusps the path enters in reverse (a front-steered
-vehicle's steered axle is self-correcting driving forward but
-trailing, and jackknife-prone, in reverse, making a reversing cusp the
-harder sub-case; forward-entering cusps and all ordinary forward
-segments are left completely untouched), and it blends
-\emph{gradually} rather than cutting over instantly, tapering linearly
-from the straightened projection at the cusp itself back to the
-original planned curve over a configurable \texttt{straight\_distance}.
+than a controller-side change. The plugin has two deliberate
+constraints: it acts \emph{only} on cusps the path enters in reverse,
+since a front-steered vehicle's steered axle is self-correcting
+driving forward but trailing and jackknife-prone in reverse, making a
+reversing cusp the harder sub-case. Forward-entering cusps and all
+ordinary forward segments are left completely untouched. The blend
+itself is also gradual rather than instant, tapering linearly from
+the straightened projection at the cusp itself back to the original
+planned curve over a configurable \texttt{straight\_distance}.
 
-\paragraph{A mutation-order bug, and the fix.} Directly testing this
+\paragraph{A mutation-order bug and the fix.} Directly testing this
 design against harder, multi-cusp replans (plausible whenever a path is
 replanned from a robot pose already mid-manoeuvre, e.g.\ during a
-recovery cycle) surfaced a genuine implementation bug: the original
+recovery cycle) surfaced a genuine implementation bug. The original
 \texttt{smooth()} detected every cusp once up front, then processed
 each one \emph{in place} on the very path array it was simultaneously
 rewriting. When two cusps fell close together, an earlier cusp's blend
 could overwrite position and heading data that a nearby later cusp
 still needed to read in order to classify itself and compute its own
 straight-line target -- a self-inflicted data race within a single,
-single-threaded function. The fix, shown in
-Listing~\ref{lst:cusp-detect}, snapshots the incoming path into a
-read-only \texttt{original} vector before any modification begins;
-every geometric decision the function makes -- cusp detection,
-forward/reverse classification, and every blend target -- reads only
-from this untouched snapshot, and writes go exclusively to a separate
-output path being built alongside it.
+single-threaded function.
+
+The fix, shown in Listing~\ref{lst:cusp-detect}, snapshots the
+incoming path into a read-only \texttt{original} vector before any
+modification begins. Every geometric decision the function makes,
+including cusp detection, forward/reverse classification and every
+blend target, reads only from this untouched snapshot. Writes go
+exclusively to a separate output path being built alongside it.
 
 \begin{lstlisting}[language=C++,caption={Cusp detection and reverse/forward classification, reading only from a read-only snapshot (\texttt{cusp\_straightener\_smoother.cpp}).},label={lst:cusp-detect}]
 const std::vector<geometry_msgs::msg::PoseStamped> original = path.poses;
@@ -388,7 +518,7 @@ fixed version classified and handled both correctly -- exactly the
 scenario the original bug would have corrupted.
 
 Table~\ref{tab:cusp-trials} compares three trials each of the
-untouched baseline, the buggy v2 smoother, and the fixed v2 smoother,
+untouched baseline, the buggy v2 smoother and the fixed v2 smoother,
 on the identical corridor reproduction goal with a fresh stack
 relaunch before every trial.
 
@@ -407,28 +537,30 @@ relaunch before every trial.
   \end{tabular}
 \end{table}
 
-Run-to-run variance is genuinely high in every configuration --
+Run-to-run variance is genuinely high in every configuration,
 consistent with the freeze being a stochastic MPPI sampling effect
-rather than a deterministic planning defect -- but the fixed smoother
-clearly outperforms the untouched baseline on every measure, while the
-buggy version is markedly worse than doing nothing at all, underlining
+rather than a deterministic planning defect. But the fixed smoother
+outperforms the untouched baseline on every measure, while the buggy
+version is markedly worse than doing nothing at all -- underlining
 how much the mutation-order bug alone was costing.
 
-\subsection{``Extending the Corner'': A Further, Larger Improvement}
+\subsection{Extending the Corner, a Further and Larger Improvement}
 \label{sec:cusp-extend}
 
 A further refinement addressed the residual freeze directly at its
-source: rather than requiring the path's incoming and outgoing legs to
-meet at one precise geometric vertex -- which
-\texttt{isWithinInversionTolerances()} must still converge on exactly,
-even with the gradual blend of Section~\ref{sec:cusp-smoother-v2} in
-place -- a new \texttt{extend\_distance} parameter pushes the cusp
-point itself further along the incoming leg's own heading before the
+source. The path's incoming and outgoing legs previously had to meet
+at one precise geometric vertex, which
+\texttt{isWithinInversionTolerances()} must still converge on
+exactly, even with the gradual blend of
+Section~\ref{sec:cusp-smoother-v2} in place. A new
+\texttt{extend\_distance} parameter instead pushes the cusp point
+itself further along the incoming leg's own heading before the
 reverse blend begins, so the incoming and outgoing legs deliberately
-overlap rather than meeting at a single tight point, giving the
-controller geometric margin around the transition instead of an exact
-target. Listing~\ref{lst:cusp-extend} shows the construction: the
-extension point is inserted into the output path, and the existing
+overlap rather than meeting at a single tight point. This gives the
+controller geometric margin around the transition, instead of an
+exact target (illustrated in Figure~\ref{fig:cusp-extend-geometry}).
+Listing~\ref{lst:cusp-extend} shows the construction: the
+extension point is inserted into the output path. The existing
 distance-based blend is re-anchored to start from it rather than from
 the original cusp position.
 
@@ -449,30 +581,98 @@ output.push_back(ext_pose);
 
 With \texttt{extend\_distance} set to \SI{0.15}{\meter} alongside the
 existing \SI{0.21}{\meter} \texttt{straight\_distance}, three further
-trials produced \SI{45.2}{\second}, \SI{38.3}{\second}, and
+trials produced \SI{45.2}{\second}, \SI{38.3}{\second} and
 \SI{48.1}{\second} -- a mean of \SI{43.9}{\second} with \textbf{zero
-recoveries in every trial}, roughly halving the already-improved
-fixed-v2 mean of \SI{86.7}{\second} on top of its improvement over the
-\SI{110.2}{\second} baseline. This is the final, locked-in
+recoveries in every trial}. This roughly halves the already-improved
+fixed-v2 mean of \SI{86.7}{\second}, on top of its improvement over
+the \SI{110.2}{\second} baseline. This is the final, locked-in
 configuration.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \begin{tikzpicture}[x=0.95cm, y=0.95cm, >={Latex[length=2mm]}]
+      \draw[thick, -{>}] (0,0) -- (2.2,1.6);
+      \node[font=\scriptsize] at (0.7,1.15) {incoming leg};
+      \draw[thick, -{>}] (2.2,1.6) -- (4.4,0);
+      \node[font=\scriptsize] at (3.7,1.15) {outgoing leg};
+      \filldraw[black] (2.2,1.6) circle (1.6pt);
+      \node[font=\scriptsize] at (2.2,2.1) {cusp vertex};
+    \end{tikzpicture}
+
+    \small (a) Unmodified path: one exact geometric vertex
+  \end{minipage}%
+  \hfill
+  \begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \begin{tikzpicture}[x=0.95cm, y=0.95cm, >={Latex[length=2mm]}]
+      \draw[thick, -{>}] (0,0) -- (2.2,1.6);
+      % extension point beyond the original vertex, along the incoming heading
+      \draw[thick, dashed] (2.2,1.6) -- (2.9,2.13);
+      \filldraw[gray] (2.9,2.13) circle (1.6pt);
+      \node[font=\scriptsize, gray, align=left] at (3.05,2.55) {extension point\\(\texttt{+extend\_distance})};
+      \filldraw[black] (2.2,1.6) circle (1.2pt);
+      \node[font=\scriptsize, align=right] at (1.35,1.35) {original\\cusp};
+      % reverse blend travels back from the extension point, overlapping the incoming leg, to the outgoing leg
+      \draw[thick, -{>}, color=gray!70!black] (2.9,2.13) to[out=250,in=140] (2.6,0.9);
+      \draw[thick, -{>}] (2.6,0.9) -- (4.8,0);
+      \node[font=\scriptsize, color=gray!70!black, align=left] at (4.15,0.75) {blend\\(\texttt{straight\_}\\\texttt{distance})};
+    \end{tikzpicture}
+
+    \small (b) Extended path: overlapping margin, no exact point required
+  \end{minipage}
+  \caption[The corner-extension mechanism]{The corner-extension mechanism of
+    Listing~\ref{lst:cusp-extend}. (a) The planner's raw output meets
+    the incoming and outgoing legs at one precise vertex, which MPPI's
+    inversion-tolerance gate must satisfy exactly. (b) The smoother
+    pushes the cusp outward along the incoming leg's own heading before
+    blending back to the outgoing leg, so the two legs deliberately
+    overlap -- trading one brittle exact target for a geometric margin
+    the controller can negotiate.}
+  \label{fig:cusp-extend-geometry}
+\end{figure}
 
 \subsection{Real-Hardware Validation}
 \label{sec:cusp-hw-validation}
 
 The fixed, corner-extending smoother was tested on the physical QCar
-with two goals sent manually by the operator, each requiring a genuine
-reversal manoeuvre: a \SI{5.15}{\meter} traverse completed in
+with two goals I sent manually, each requiring a
+genuine reversal manoeuvre. A \SI{5.15}{\meter} traverse completed in
 \SI{50.1}{\second} with zero recoveries across seven replans (cusp
-counts 1, 1, 1, 1, 8, 8, 0), and a second, longer traverse completed in
+counts 1, 1, 1, 1, 8, 8, 0). A second, longer traverse completed in
 \SI{96.8}{\second}, also with zero recoveries, across eight replans
 (cusp counts 5, 5, 5, 5, 9, 10, 5, 3). Both goals succeeded outright --
 the strongest available confirmation that the fix generalises beyond
 the simulated corridor reproduction it was developed against.
+Figures~\ref{fig:cusp-hardware-zoom} and~\ref{fig:hardware-kturn-nav}
+are taken from this real-hardware validation session.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.55\textwidth]{figures/cusp-hardware-zoom.png}
+  \caption[A reversal cusp during real-hardware validation]{A reversal cusp during real-hardware validation: the global
+    plan (green) folding back on itself, with the locally-smoothed
+    path (red) already following the corner-extended geometry of
+    Section~\ref{sec:cusp-extend} rather than the original sharp
+    vertex.}
+  \label{fig:cusp-hardware-zoom}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/hardware-kturn-nav.png}
+  \caption[RViz during a real-hardware reversal-manoeuvre trial]{RViz during one of the real-hardware reversal-manoeuvre
+    trials: the navigation feedback panel (left) reports the goal as
+    still active, with ETA and distance-remaining updating live as the
+    vehicle follows the curved approach into the reversal.}
+  \label{fig:hardware-kturn-nav}
+\end{figure}
 
 Both goals also produced noticeably higher cusp counts on individual
 replans (up to 8--10) than any simulation trial had shown (maximum
-approximately 3) -- an open, unexplained gap between simulated and
-real replanning behaviour, plausibly \texttt{SmacPlannerHybrid}
+approximately 3). This is an open, unexplained gap between simulated
+and real replanning behaviour, plausibly \texttt{SmacPlannerHybrid}
 responding to more awkward real goal/environment geometry than the
 simulated corridor exercised, but not confirmed. It did not prevent
 either goal from succeeding, so it is recorded here as a genuine open
@@ -480,44 +680,47 @@ item for future work (Section~\ref{sec:prospects}) rather than a
 present limitation of the fix.
 
 One apparent timing anomaly in this trace was investigated and
-correctly ruled out rather than mistaken for a bug: the first several
-\texttt{smooth()} calls on the first goal landed within roughly one
-second of each other, which initially looked like an unthrottled
-replan burst. Re-reading the behaviour tree configuration showed this
+correctly ruled out, rather than mistaken for a bug. The first
+several \texttt{smooth()} calls on the first goal landed within
+roughly one second of each other, which initially looked like an
+unthrottled replan burst. Re-reading the behaviour tree configuration showed this
 is by design: \texttt{IsPathValid} is already rate-limited to
-\SI{1}{\hertz} by an existing \texttt{RateController}, and a
+\SI{1}{\hertz} by an existing \texttt{RateController}. A
 \texttt{RateController} fires immediately on its first tick before
-settling into its steady interval -- exactly the pattern observed,
-once the also-unconditional, once-only \texttt{InitialComputePathToPose}
-call is accounted for separately. Catching this before implementing a
+settling into its steady interval. This is exactly the pattern
+observed, once the also-unconditional, once-only
+\texttt{InitialComputePathToPose} call is accounted for separately.
+Catching this before implementing a
 second, redundant rate limiter avoided a change that would have had no
 effect at all.
 
-\subsection{Continued Iteration: A Re-Extension Bug and a Curvature-Continuing Refinement}
+\subsection{A Re-Extension Bug and a Curvature-Continuing Refinement}
 \label{sec:cusp-continued-iteration}
 
-Hardware testing continued beyond the validation above, and surfaced a
+Hardware testing continued beyond the validation above and surfaced a
 further, genuine bug in the corner-extension mechanism itself, plus a
-refinement to it -- both developed and sim-tested after the
-hardware-validated result of Section~\ref{sec:cusp-hw-validation}, and
-not yet re-confirmed on the physical vehicle at the time of writing;
-they are reported here with that status made explicit, consistent with
-this thesis's practice of not presenting a provisional result as final.
+refinement to it. Both were developed and sim-tested after the
+hardware-validated result of Section~\ref{sec:cusp-hw-validation}
+and are not yet re-confirmed on the physical vehicle at the time of
+writing. They are reported here with that status made explicit,
+consistent with this thesis's practice of not presenting a
+provisional result as final.
 
-\paragraph{Bug: the extension re-applies to the same cusp on every replan.} Because Nav2 replans roughly once per second while a goal is
-active, and each replan's path starts fresh from the robot's current
-pose, the \emph{same} physical K-turn cusp reappears near the front of
-the replanned path on every single replan as the robot approaches and
-then executes it -- and, since the smoother has no notion of ``already
-handled this one,'' it re-applied the full extend-and-straighten
-treatment to that same cusp every time. Direct log analysis of a real
-hardware run confirmed this concretely: one K-turn's cusp received the
-treatment on eight separate replans as the robot closed in on it, its
-index in the (shrinking) replanned path falling from 94 down to 1 --
-by the final replan, the robot was already essentially at the cusp,
-mid-manoeuvre, and the smoother was still reshaping the path directly
-underneath it rather than leaving an already-committed manoeuvre
-alone. This is, functionally, a milder recurrence of the same
+\paragraph{Bug: the extension re-applies to the same cusp on every replan.} Nav2 replans roughly once per second while a goal is
+active. Each replan's path starts fresh from the robot's current
+pose. Because of this, the \emph{same} physical K-turn cusp reappears
+near the front of the replanned path on every single replan, as the
+robot approaches and then executes it. Since the smoother has no
+notion of ``already handled this one,'' it re-applied the full
+extend-and-straighten treatment to that same cusp every time. Direct
+log analysis of a real hardware run confirmed this concretely: one
+K-turn's cusp received the treatment on eight separate replans as the
+robot closed in on it, its index in the (shrinking) replanned path
+falling from 94 down to 1. By the final replan, the robot was already
+essentially at the cusp, mid-manoeuvre. The smoother was still
+reshaping the path directly underneath it, rather than leaving an
+already-committed manoeuvre alone. This is, functionally, a milder
+recurrence of the same
 ``interrupting an in-progress manoeuvre makes it worse'' pattern
 identified repeatedly elsewhere in this investigation
 (Section~\ref{sec:cusp-fixes-failed}), this time self-inflicted by the
@@ -525,17 +728,17 @@ smoother rather than by an external replan trigger.
 
 The fix adds a \texttt{min\_lead\_distance} parameter (\SI{0.3}{\meter}):
 the arc length from the replanned path's start to each candidate cusp
-is computed, and the extend-and-straighten treatment is only applied
+is computed. The extend-and-straighten treatment is only applied
 if the cusp is still at least this far ahead of the robot's current
 position, leaving an already-reached or already-underway cusp
 untouched rather than reshaping it again. Two sim trials on the
-standard K-turn reproduction goal after this fix showed no regression,
-though the specific skip condition was not directly observed firing in
-either trial (both completed before any replan's cusp closed to within
-the threshold) -- correct by code review and by the logged parameter
-value at start-up, but not yet directly confirmed exercising its skip
-branch. This is recorded as an open verification item, not a claimed
-result.
+standard K-turn reproduction goal after this fix showed no
+regression, though the specific skip condition was not directly
+observed firing in either trial (both completed before any replan's
+cusp closed to within the threshold). It is correct by code review
+and by the logged parameter value at start-up, but not yet directly
+confirmed exercising its skip branch. This is recorded as an open
+verification item, not a claimed result.
 
 \paragraph{Refinement: continuing the incoming curve rather than cutting straight.} Separately, the extension itself was upgraded from a
 straight-line push-out (Listing~\ref{lst:cusp-extend}, hardware-validated
@@ -544,13 +747,14 @@ motivation is direct: cutting straight right at the corner, even when
 the vehicle is still visibly curving on its approach to the cusp, asks
 the vehicle to straighten abruptly at exactly the point it should be
 easing into the manoeuvre most naturally. The refined version
-estimates the incoming leg's curvature at the cusp from its own recent
-yaw change, $\kappa = \Delta\theta/\Delta s$ over the last incoming
-segment, and generates the extension as a short constant-curvature arc
-with that same curvature rather than a straight line -- built from
-several closely spaced sub-poses (\SI{0.03}{\meter} steps) so the
-curve is genuinely present in the path's own geometry, not merely
-implied by a single endpoint. It degrades automatically to the
+estimates the incoming leg's curvature at the cusp from its own
+recent yaw change, $\kappa = \Delta\theta/\Delta s$ over the last
+incoming segment. It generates the extension as a short
+constant-curvature arc with that same curvature, rather than a
+straight line. This arc is built from several closely spaced
+sub-poses (\SI{0.03}{\meter} steps), so the curve is genuinely present
+in the path's own geometry, not merely implied by a single endpoint.
+It degrades automatically to the
 original straight-line behaviour when the incoming leg is already
 straight ($\kappa \approx 0$), so it is a strict generalisation of the
 hardware-validated mechanism rather than a replacement with different
@@ -581,7 +785,7 @@ for (int s = 1; s <= extension_steps; ++s) {
 
 A single sim smoke test on the standard reproduction goal completed
 successfully ($\approx$\SI{99}{\second}, within the range of prior
-trials) with the new curvature-extension code path exercised across
+trials). The new curvature-extension code path was exercised across
 eight reverse-cusp events over the run's several replans, with no
 numerical failure. This is reported as a working, sim-verified
 refinement, not yet subjected to the same multi-trial statistical
@@ -589,47 +793,52 @@ comparison or hardware re-validation as the straight-line version it
 replaces -- a concrete, already-identified next step
 (Section~\ref{sec:prospects}).
 
-\subsection{A Related Planner-Side Finding: Near-Wall Goals and a Tolerance Trade-off}
+\subsection{A Related Planner-Side Finding on Near-Wall Goals and a Tolerance Trade-off}
 \label{sec:near-wall-tolerance}
 
 A separate, planner-level finding surfaced during the same period of
-continued tuning, also directly relevant to operating in tight, wall-adjacent
-spaces: a goal placed only $\approx$\SI{0.20}{\meter} from the nearest
-mapped wall -- inside the footprint clearance the vehicle's own
-\SI{0.44}{\meter}$\times$\SI{0.18}{\meter} collision footprint requires
--- failed outright on every one of six recovery retries, each attempt
-logging \texttt{SmacPlannerHybrid} exhausting its entire search
-iteration budget without ever finding a collision-free plan. This is a
+continued tuning, also directly relevant to operating in tight,
+wall-adjacent spaces. A goal placed only $\approx$\SI{0.20}{\meter}
+from the nearest mapped wall -- inside the footprint clearance the
+vehicle's own \SI{0.44}{\meter}$\times$\SI{0.18}{\meter} collision
+footprint requires -- failed outright on every one of six recovery
+retries. Each attempt logged \texttt{SmacPlannerHybrid} exhausting
+its entire search iteration budget without ever finding a
+collision-free plan. This is a
 goal-placement issue rather than a code defect: no footprint- or
-inflation-related configuration was implicated, and the practical
+inflation-related configuration was implicated. The practical
 guidance that follows is simply to keep any commanded goal at least
 \SIrange{0.3}{0.4}{\meter} clear of a mapped obstacle, given this
 vehicle's footprint.
 
-A tempting-looking fix was tried and deliberately reverted, and the
+A tempting-looking fix was tried and deliberately reverted. The
 reason why is itself a useful finding. \texttt{SmacPlannerHybrid}'s
 own search loop, confirmed directly against its source, backtracks to
 the closest node it reached within a configurable \texttt{tolerance}
-radius rather than failing outright whenever the exact goal proves
-infeasible -- so widening \texttt{tolerance} (from \SI{0.5}{\meter} to
-\SI{1.0}{\meter}) did immediately rescue the failing near-wall goal in
-a live test. However, it introduced a worse, silent failure mode in
-its place: the substituted pose the planner backtracks to, not the
-originally requested goal, becomes the plan's actual endpoint, and
-nothing downstream in the standard \texttt{NavigateToPose} behaviour
-tree ever rechecks the final pose against the original request --
-so \emph{any} marginally infeasible goal, not only the intended
-near-wall case, could now report \texttt{Goal succeeded} while the
-vehicle sat up to a full \SI{1.0}{\meter} away from, and potentially
-facing the wrong direction relative to, where it was actually asked to
-go, with no indication in the result that a substitution had occurred
-at all. An honest, visible failure is preferable to a silently
-mis-reported success, particularly for a system whose results this
-thesis reports as measured fact -- \texttt{tolerance} was reverted to
-its original \SI{0.5}{\meter}, accepting that the specific near-wall
-goal will fail outright again, since the correct fix for a genuine
-target at that location is to ensure real clearance there, not to
-relax what counts as ``success'' for every goal system-wide. This
+radius, rather than failing outright whenever the exact goal proves
+infeasible. Widening \texttt{tolerance} (from \SI{0.5}{\meter} to
+\SI{1.0}{\meter}) did immediately rescue the failing near-wall goal
+in a live test.
+
+It introduced a worse, silent failure mode in its place. The
+substituted pose the planner backtracks to -- not the originally
+requested goal -- becomes the plan's actual endpoint. Nothing
+downstream in the standard \texttt{NavigateToPose} behaviour tree
+ever rechecks the final pose against the original request.
+\emph{Any} marginally infeasible goal, not only the intended
+near-wall case, could now report \texttt{Goal succeeded}
+while the vehicle sat up to a full \SI{1.0}{\meter} away from where
+it was actually asked to go and potentially facing the wrong
+direction. Nothing in the result would indicate that a substitution
+had occurred at all.
+
+An honest, visible failure is preferable to a silently mis-reported
+success, particularly for a system whose results this thesis reports
+as measured fact. \texttt{tolerance} was reverted to its original
+\SI{0.5}{\meter}, accepting that the specific near-wall goal will
+fail outright again. The correct fix for a genuine target at that
+location is to ensure real clearance there, not to relax what counts
+as ``success'' for every goal system-wide. This
 mirrors, at the planner level, the same safety-over-convenience
 judgement Section~\ref{sec:active-braking} applies at the control
 level: a fix that resolves the reported symptom by quietly weakening a
@@ -640,26 +849,27 @@ time pressure.
 \label{sec:cusp-followon-reverted}
 
 Two further improvements were implemented and hardware-tested the same
-day, and both were reverted -- included here because a reverted
-attempt with a documented, evidence-based reason is exactly the kind
-of result this thesis's methodology (Section~\ref{sec:methodology-overview})
-treats as worth reporting, not discarding.
+day. Both were reverted. They are included here because a
+reverted attempt with a documented, evidence-based reason is exactly
+the kind of result this thesis's methodology
+(Section~\ref{sec:methodology-overview}) treats as worth reporting,
+not discarding.
 
-\texttt{IsPathValidDebouncedCondition}, a custom behaviour-tree
-condition requiring two consecutive failed validity checks (rather than
-stock \texttt{IsPathValid}'s single check) before triggering a replan,
-improved simulation trials further still (\SIlist{38.2;38.3;40.4}{\second},
+\texttt{IsPathValidDebouncedCondition} is a custom behaviour-tree
+condition requiring two consecutive failed validity checks, rather than
+stock \texttt{IsPathValid}'s single check, before triggering a replan.
+It improved simulation trials further still (\SIlist{38.2;38.3;40.4}{\second},
 mean \SI{39.0}{\second}, zero recoveries) by absorbing occasional
 single-tick sensor or transform noise that would otherwise trigger an
-unnecessary replan. On real hardware, however, a subsequent run on a
-freshly scanned map showed the vehicle never executing its reverse
-segment at all: the local costmap reported the path invalid on
+unnecessary replan. On real hardware, a subsequent run
+showed the vehicle never executing its reverse
+segment at all. The local costmap reported the path invalid on
 \emph{every} check, not intermittently, so the debounced condition
 correctly (and unhelpfully) confirmed a persistent rather than
 transient invalidity every \SIrange{1.5}{2.6}{\second}, aborting the
-in-progress manoeuvre each time -- the same ``interrupting a manoeuvre
-makes it worse'' lesson from Section~\ref{sec:cusp-fixes-failed},
-under a new trigger. The most likely root cause, not fully confirmed
+in-progress manoeuvre each time. This is the same ``interrupting a
+manoeuvre makes it worse'' lesson from
+Section~\ref{sec:cusp-fixes-failed}, under a new trigger. The most likely root cause, not fully confirmed
 before the revert, is an unmeasured \texttt{qcar\_clock\_offset}
 (Section~\ref{sec:clock-offset}) on the relay for that session -- a
 fresh measurement immediately afterward found a real
@@ -669,28 +879,29 @@ known-good state rather than debug two independent changes under time
 pressure, though it was not itself implicated (every replan in the
 failing run came back at exactly two cusps).
 
-A custom \texttt{PathDeviationCritic} -- pulling sampled trajectories
+A custom \texttt{PathDeviationCritic} pulls sampled trajectories
 toward a point further along the path once the vehicle drifts more
 than \SI{0.3}{\meter} from it, rather than toward the nearest path
-point -- was tested for three trials
+point. It was tested for three trials
 (\SIlist{112.8;71.7;38.4}{\second}, mean \SI{74.3}{\second}, zero
 recoveries) against the corner-extending smoother's own
-\SI{43.9}{\second} mean, and reverted: both the mean and the
+\SI{43.9}{\second} mean and reverted. Both the mean and the
 run-to-run variance were worse, plausibly because the new critic's
 pull competed directly against the stock \texttt{PathAlignCritic}
 rather than complementing it.
 
-\subsection{A Related Operational Caution: Goal Preemption}
+\subsection{A Related Operational Caution on Goal Preemption}
 \label{sec:goal-preemption-caution}
 
-A separate mechanics finding from this investigation, worth recording
-as an operational rule rather than a fix: if a goal is deep into a
-failing/retrying cycle (for example, the planner repeatedly failing to
-find a plan, with the behaviour tree's recovery retries nearly
-exhausted) and a new goal is sent while the old one is still active, the
-new goal does not reliably receive a fresh attempt -- it was observed
-to fail almost instantly, with no real planning attempt of its own,
-rather than superseding the old goal cleanly. The practical rule is to
+A separate mechanics finding from this investigation is worth
+recording as an operational rule rather than a fix. Consider a goal
+that is deep into a failing/retrying cycle: the planner repeatedly
+failing to find a plan, say, with the behaviour tree's recovery
+retries nearly exhausted. If a new goal is sent while that old one
+is still active, the new goal does not reliably receive a fresh
+attempt. It was observed to fail almost instantly, with no real
+planning attempt of its own, rather than superseding the old goal
+cleanly. The practical rule is to
 let a stuck goal finish (fail out) or explicitly cancel it before
 sending a correction, rather than assuming a new goal always starts
 with a clean slate.
@@ -700,46 +911,46 @@ with a clean slate.
 
 After the throttle calibration of Section~\ref{sec:final-calibration}
 (but before the buffering-defect fix of Section~\ref{sec:readmode-bug}),
-a live Nav2 goal test surfaced a new symptom, described by the
-vehicle's operator in detail: when driving toward a goal inside an
+a live Nav2 goal test surfaced a new symptom, described in detail
+below. When driving toward a goal inside an
 enclosed space, the entire mapped rectangle appeared to shift in
 RViz, with the LiDAR scan keeping its internal shape but dragging
 behind the robot's true motion before ``snapping'' back into
-alignment -- and the same shift-then-correct pattern recurred, after
-a delay, once the goal was reported reached.
+alignment. The same shift-then-correct pattern recurred, after a
+delay, once the goal was reported reached.
 
 \subsection{Ruling Out Simpler Causes}
 \label{sec:display-lag-rule-out}
 
-Several candidate causes were checked directly and eliminated:
-\texttt{qcar\_clock\_offset} was re-measured fresh and re-applied
-(with one procedural caution found along the way -- a relay launch
+Several candidate causes were checked directly and eliminated.
+\texttt{qcar\_clock\_offset} was re-measured fresh and re-applied.
+One procedural caution surfaced along the way: a relay launch
 command given during this session had omitted the
 \texttt{qcar\_clock\_offset} argument entirely, silently defaulting
 it to zero and briefly reintroducing exactly the bug fixed in
-Section~\ref{sec:clock-offset}, worth checking for explicitly before
-suspecting the offset value itself); \texttt{map}
+Section~\ref{sec:clock-offset}. It is worth checking for this
+explicitly before suspecting the offset value itself. \texttt{map}
 $\rightarrow$ \texttt{odom} TF was captured directly during active
-driving and updated in small, smooth, incremental steps rather than
-sudden jumps; the RViz \texttt{Fixed Frame} configuration was
-confirmed correct (\texttt{map}); \texttt{base} $\rightarrow$
-\texttt{lidar} TF is static and therefore not a timing bottleneck;
-local CPU load was checked and found unremarkable (RViz
-$\approx$10\%, the Nav2 container $\approx$29\%); network round-trip
-latency to the QCar was \SIrange{1}{6}{\milli\second}, far too small
-to explain a multi-second visible effect; and direct
-receipt-versus-capture latency on \texttt{/odom} and \texttt{/scan}
-measured $\approx$\SIlist{0.18;0.20}{\second} respectively, small
-and tightly clustered, ruling out network or relay transit as the
-source of a large visible lag.
+driving and updated in small, smooth, incremental steps, rather than
+sudden jumps. The RViz \texttt{Fixed Frame} configuration was confirmed
+correct (\texttt{map}). \texttt{base} $\rightarrow$ \texttt{lidar} TF
+is static, so it is not a timing bottleneck. Local CPU load was
+checked and found unremarkable (RViz $\approx$10\%, the Nav2
+container $\approx$29\%). Network round-trip latency to the QCar was
+\SIrange{1}{6}{\milli\second}, far too small to explain a
+multi-second visible effect. Direct receipt-versus-capture latency
+on \texttt{/odom} and \texttt{/scan} measured
+$\approx$\SIlist{0.18;0.20}{\second} respectively, small and tightly
+clustered, ruling out network or relay transit as the source of a
+large visible lag.
 
-\subsection{Instrumentation: \texttt{monitor\_goal\_timing.py}}
+\subsection{Instrumentation via \texttt{monitor\_goal\_timing.py}}
 \label{sec:monitor-goal-timing}
 
 A dedicated instrumentation tool was built to timestamp a single Nav2
 goal end to end: goal-sent, real motion start/stop (from
 \texttt{/odom}), RViz-displayed motion start/stop (from the
-\texttt{map} $\rightarrow$ \texttt{base} TF), and goal-reached. Two
+\texttt{map} $\rightarrow$ \texttt{base} TF) and goal-reached. Two
 implementation defects were found and fixed while building this tool,
 both worth recording as general lessons for any future action-status
 monitoring code on ROS~2:
@@ -749,10 +960,11 @@ monitoring code on ROS~2:
     for \texttt{/navigate\_to\_pose/\_action/status} is
     \texttt{RELIABLE} + \texttt{TRANSIENT\_LOCAL}. \texttt{rclpy}'s
     default subscription QoS, constructed by passing a plain integer
-    depth, leaves durability at \texttt{VOLATILE} -- technically
-    QoS-compatible by specification (a subscriber may request less
-    than a publisher offers), but this delivered \emph{zero} messages
-    in practice, confirmed twice on real hardware. The fix required
+    depth, leaves durability at \texttt{VOLATILE}. This is
+    technically QoS-compatible by specification (a subscriber may
+    request less than a publisher offers), but it delivered
+    \emph{zero} messages in practice, confirmed twice on real
+    hardware. The fix required
     constructing an explicit \texttt{QoSProfile} matching the
     publisher exactly, a reminder that formal QoS compatibility rules
     do not guarantee the practical behaviour a developer expects
@@ -760,7 +972,7 @@ monitoring code on ROS~2:
     \texttt{TRANSIENT\_LOCAL}-publisher / \texttt{VOLATILE}-subscriber
     case Table~\ref{tab:qos-compatibility} marks as formally
     compatible: durability governs whether \emph{already-published}
-    samples are replayed to a newly matched subscriber, and a
+    samples are replayed to a newly matched subscriber. A
     low-frequency topic like action status may not publish a fresh
     sample again for a long time, so a \texttt{VOLATILE} subscriber
     that missed the replay is left waiting with no error raised on
@@ -770,7 +982,7 @@ monitoring code on ROS~2:
     but a goal can transition directly from absent to
     \texttt{EXECUTING} between two consecutive status publishes,
     skipping an independently observable \texttt{ACCEPTED} update
-    entirely -- this topic's \texttt{TRANSIENT\_LOCAL} history appears
+    entirely. This topic's \texttt{TRANSIENT\_LOCAL} history appears
     to retain only the latest status per goal, not the full transition
     sequence. The fix tracks goal UUIDs instead: the first appearance
     of a previously unseen \texttt{goal\_id} (after seeding a known-ID
@@ -796,11 +1008,11 @@ self.create_subscription(GoalStatusArray, '/navigate_to_pose/_action/status',
                           self.status_cb, STATUS_QOS)
 \end{lstlisting}
 
-Listing~\ref{lst:goal-uuid-tracking} shows the second fix: rather than
+Listing~\ref{lst:goal-uuid-tracking} shows the second fix. Rather than
 waiting for a specific status code, the callback seeds a
 \texttt{known\_goal\_ids} set from whatever the topic already retains
-at startup (so pre-existing, already-completed goals are not
-mistaken for a new one), then marks ``goal sent'' the first time a
+at startup, so pre-existing, already-completed goals are not
+mistaken for a new one. It then marks ``goal sent'' the first time a
 previously unseen goal UUID appears in any status, independent of
 which status value that UUID first carries.
 
@@ -824,8 +1036,8 @@ for s in msg.status_list:
 
 An explicit discovery-wait (polling \texttt{get\_publishers\_info\_by\_topic}
 plus a settle margin) was also required before treating the monitor
-as ready to observe a goal -- a subscription created and immediately
-assumed matched can miss a fast goal's status entirely if DDS
+as ready to observe a goal. A subscription created and immediately
+assumed matched can miss a fast goal's status entirely, if DDS
 discovery with the separate \texttt{bt\_navigator} process has not
 yet completed.
 
@@ -855,99 +1067,106 @@ this tool.
 
 This gives a start gap (RViz minus real) of $+\SI{0.559}{\second}$
 and a stop gap of $-\SI{0.144}{\second}$ (RViz reporting ``stopped''
-slightly \emph{before} the real vehicle fully settled -- small, and
+slightly \emph{before} the real vehicle fully settled -- small and
 plausibly within the detection threshold's own noise rather than a
 separate effect). Note that the real-start offset of
-\SI{2.145}{\second} already includes the static-friction stiction
-delay characterised in Section~\ref{sec:deadband-discovery}, so it is
-not, by itself, a new timing number.
+\SI{2.145}{\second} already includes the HAL read-buffer start-up
+delay characterised in Section~\ref{sec:readmode-bug}, so it is not,
+by itself, a new timing number.
 
-\subsection{Interpretation, and a Necessary Caveat}
+\subsection{Interpretation and a Necessary Caveat}
 \label{sec:display-lag-interpretation}
 
 This measurement supports two separate, unrelated conclusions. The
 $\approx$\SI{0.56}{\second} start-of-goal gap is a modest, constant
-pipeline latency -- network transit, AMCL's scan-matching cycle, and
-RViz's own subscribe/render overhead stacking up -- between a real
-event and its appearance on screen; it is not a TF-jump defect (ruled
-out in Section~\ref{sec:display-lag-rule-out}), and it is not a real
-navigation-performance problem, since Nav2's own controller consumes
-\texttt{/odom}/\texttt{/amcl\_pose}/\texttt{/tf} directly at the
-source, without RViz's additional rendering overhead -- the robot's
-actual control decisions are working with data less stale than what a
-human operator sees on screen. The end-of-goal gap, by contrast, is
+pipeline latency between a real event and its appearance on screen.
+Network transit, AMCL's scan-matching cycle and RViz's own
+subscribe/render overhead all stack up to produce it. It is not a
+TF-jump defect
+(ruled out in Section~\ref{sec:display-lag-rule-out}). Nor is it a
+real navigation-performance problem, since Nav2's own controller
+consumes \texttt{/odom}/\texttt{/amcl\_pose}/\texttt{/tf} directly at
+the source, without RViz's additional rendering overhead. The
+robot's actual control decisions are working with data less stale
+than what a human operator sees on screen. The end-of-goal gap, by contrast, is
 the same stop-latency/coast phenomenon already characterised in
-Chapter~\ref{ch:calibration}: the real vehicle continuing to move for
-\SI{2.238}{\second} after ``goal reached'' matches the pre-fix
-stop-latency figures in Table~\ref{tab:calibration-validation}'s
-predecessor almost exactly, confirmed here via a completely
-independent measurement method (a live Nav2 goal rather than the
-open-loop \texttt{drive\_and\_log.py} test).
+Chapter~\ref{ch:calibration}. The real vehicle keeps moving for
+\SI{2.238}{\second} after the goal is reported reached. This matches
+the pre-fix stop-latency figures in
+Table~\ref{tab:calibration-validation}'s predecessor almost exactly,
+confirmed here via a completely independent measurement method (a
+live Nav2 goal rather than the open-loop \texttt{drive\_and\_log.py}
+test).
 
-The necessary caveat, and the reason this section is presented in
+The necessary caveat and the reason this section is presented in
 detail rather than as a closed result: \textbf{this entire
 measurement was taken while the \texttt{readMode=1} buffering defect
 of Section~\ref{sec:readmode-bug} was still active} in
 \texttt{qcar\_bridge.py} -- it was fixed the following day. Given that
 defect's confirmed effect on every encoder-derived quantity
 (Table~\ref{tab:readmode-fix}), the \SI{2.238}{\second} end-of-goal
-figure here is almost certainly, in large part, the same artefact
-rather than a distinct navigation-specific finding -- its magnitude
+figure here is most likely the same artefact, not a distinct
+navigation-specific finding. Its magnitude
 matches the buffering defect's characterised effect too closely to be
 coincidental. The \SI{0.559}{\second} start-gap figure is a different
 measurement (\texttt{map}$\to$\texttt{base} TF timing rather than
-\texttt{/odom} velocity thresholding) and is less obviously the same
-artefact, but since it is also downstream of the same buffered
-\texttt{/odom} stream, it cannot be treated as a clean, artefact-free
-measurement of pure network/AMCL/RViz pipeline latency either. The
-diagnostic methodology and tooling built in this section -- the
-QoS/goal-detection fixes, and the systematic elimination of TF-jump,
-Fixed-Frame, and network-latency causes -- remain valid and reusable;
-only the specific numbers in Table~\ref{tab:display-lag} should be
-treated as provisional pending a fresh \texttt{monitor\_goal\_timing.py}
-run with the \texttt{readMode=0} fix in place. % TODO: re-run and report
+\texttt{/odom} velocity thresholding) and is not as directly tied to
+the same artefact. But since it is also downstream of the same
+buffered \texttt{/odom} stream, it cannot be treated as a clean,
+artefact-free measurement of pure network/AMCL/RViz pipeline latency
+either.
+
+The diagnostic methodology and tooling built in this section remain
+valid and reusable: the QoS/goal-detection fixes and the systematic
+elimination of TF-jump, Fixed-Frame and network-latency causes all
+still hold.
+Only the specific numbers in Table~\ref{tab:display-lag} should be
+treated as provisional against the \texttt{readMode=1} defect, rather
+than as a clean measurement of the final, fixed system. This project's
+hardware access concluded before \texttt{monitor\_goal\_timing.py}
+could be re-run with the \texttt{readMode=0} fix in place, so no
+corrected figures are available (Section~\ref{sec:results-limitations}).
 
 \section{Final Validation}
 \label{sec:final-validation}
 
 Following the \texttt{readMode=0} fix (Section~\ref{sec:readmode-bug}),
 a live Nav2 goal was re-run on the physical vehicle -- full onboard
-bridge, LiDAR node, and relay node, with AMCL localised against the
-existing saved map. The vehicle's operator's direct, contemporaneous
+bridge, LiDAR node and relay node, with AMCL localised against the
+existing saved map. My direct, contemporaneous
 assessment was unambiguous: navigation was ``working almost
-perfectly'' -- a strong qualitative result, and one consistent with
+perfectly.'' This is a strong qualitative result, consistent with
 the buffering defect having been the dominant cause of the
 ``skeleton of the map is moving'' symptom that opened
 Section~\ref{sec:display-lag}, rather than merely a contributing
 factor to it. \texttt{monitor\_goal\_timing.py} was not re-run for
 this specific goal, so the precise post-fix start-gap and
 end-of-goal figures corresponding to Table~\ref{tab:display-lag}
-are not available as quantitative numbers in this thesis. % TODO:
-% capture these numbers with a fresh lab session if at all possible -
-% this is the single most valuable remaining data point for Ch. 7.
+are not available as quantitative numbers in this thesis.
 
 \section{Summary}
 \label{sec:nav-integration-summary}
 
 This chapter closes the sim-to-real migration begun in
-Chapter~\ref{ch:sim-stack}: the physical QCar, connected through the
+Chapter~\ref{ch:sim-stack}. The physical QCar, connected through the
 bridge of Chapter~\ref{ch:hardware-bridge} and calibrated per
 Chapter~\ref{ch:calibration}, was shown to complete real, closed-loop
-Nav2 navigation goals, including an Ackermann-appropriate custom MPPI
-critic and phased integration that isolated each subsystem's own
-correctness before combining it with the next. Section~\ref{sec:cusp-freeze}'s
-custom smoother resolved a genuine execution-side freeze at reversal
-cusps -- reducing a representative K-turn manoeuvre's simulated mean
-duration from \SI{110.2}{\second} with recoveries to \SI{43.9}{\second}
-with none, and validated directly on the physical vehicle across two
-independent goals with zero recoveries in either -- while its two
-reverted follow-on attempts, and the still-open gap between simulated
-and real replan complexity, are reported alongside it rather than
-omitted. The one remaining significant open item is quantitative
+Nav2 navigation goals. This included an Ackermann-appropriate custom
+MPPI critic and phased integration that isolated each subsystem's own
+correctness before combining it with the next.
+
+Section~\ref{sec:cusp-freeze}'s custom smoother resolved a genuine
+execution-side freeze at reversal cusps, reducing a representative
+K-turn manoeuvre's simulated mean duration from \SI{110.2}{\second}
+with recoveries to \SI{43.9}{\second} with none. The fix was validated
+directly on the physical vehicle across two independent goals, with
+zero recoveries in either. Its two reverted follow-on attempts and
+the still-open gap between simulated and real replan complexity are
+reported alongside it rather than omitted. The one remaining significant open item is quantitative
 rather than functional: this chapter's display-lag investigation
 (Section~\ref{sec:display-lag}) was measured under a bridge
 configuration later found to be affected by the buffering defect of
-Section~\ref{sec:readmode-bug}, and a qualitative post-fix confirmation
+Section~\ref{sec:readmode-bug}. A qualitative post-fix confirmation
 exists, but a fresh quantitative re-measurement does not.
 Chapter~\ref{ch:results} draws together the quantitative results
 available across this and the preceding two chapters.

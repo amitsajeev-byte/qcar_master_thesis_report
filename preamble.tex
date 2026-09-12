@@ -83,6 +83,12 @@
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{3}
 
+% --- Footnotes: numbered consecutively throughout the document, not
+% reset per chapter (mandatory per the Campus Cham "Specific
+% Instructions" registration document) -----------------------------
+\usepackage{chngcntr}
+\counterwithout{footnote}{chapter}
+
 % --- Header/footer: consecutive page numbers --------------------------
 \usepackage{fancyhdr}
 \pagestyle{fancy}
@@ -100,10 +106,22 @@
 % --- Figures and tables ------------------------------------------------
 \usepackage{graphicx}
 \usepackage{caption}
+\usepackage{subcaption}
 \captionsetup{font=small,labelfont=bf,justification=justified}
 \usepackage{booktabs}   % clean table rules (no vertical/frame lines)
 \usepackage{longtable}  % tables that span multiple pages (Results ch.)
 \usepackage{array}
+
+% --- Diagrams and plots -------------------------------------------------
+% No photos/screenshots exist for this thesis; every figure is instead
+% drawn directly from data and mechanisms already described in the
+% prose (architecture block diagrams, a path-geometry diagram, and
+% pgfplots charts built from the thesis's own result tables), so a
+% reader never has to take a described mechanism or number on faith.
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
 
 % --- Formulas and physical quantities -----------------------------------
 \usepackage{amsmath}

@@ -11,7 +11,12 @@
 
 Table~\ref{tab:app-safety-limits} lists the documented hardware
 safety limits enforced throughout every piece of drive-control code
-presented in this thesis (Section~\ref{sec:qcar-platform}).
+presented in this thesis. The PWM and steering/overcurrent limits are
+discussed in Section~\ref{sec:qcar-platform}
+\cite{quanser2023qcar,quanser2023troubleshooting}. The battery
+voltage thresholds are documented only in Quanser's troubleshooting
+manual \cite{quanser2023troubleshooting} and are not otherwise
+discussed in the main text.
 
 \begin{table}[htbp]
   \centering
@@ -39,9 +44,9 @@ Table~\ref{tab:app-tooling} summarises the diagnostic scripts
 developed and used throughout Chapters~\ref{ch:hardware-bridge}
 --\ref{ch:nav-integration}. Full source is maintained in the
 project's version-controlled repository (electronic submission), not
-reproduced here in full per the guideline's recommendation that
-programming code be supplied on the electronic data carrier rather
-than printed.
+reproduced here in full. This follows the guideline's own
+recommendation that programming code be supplied on the electronic
+data carrier rather than printed.
 
 \begin{table}[htbp]
   \centering
@@ -56,7 +61,7 @@ than printed.
     \texttt{drive\_and\_log.py} & Drive to a target distance at a fixed speed, log \texttt{/odom} to CSV, exit automatically (Section~\ref{sec:final-calibration}) \\
     \texttt{check\_stop\_latency.py} & As above, plus reports cruise velocity and stop latency directly (Section~\ref{sec:deadband-discovery}) \\
     \texttt{monitor\_goal\_timing.py} & Instruments one Nav2 goal end-to-end: goal-sent, real/displayed motion start and stop, goal-reached (Section~\ref{sec:monitor-goal-timing}) \\
-    \texttt{log\_goal.py} & Logs every \texttt{/plan} replan (sequence-numbered CSVs), \texttt{/odom}, and \texttt{/cmd\_vel} for one goal, for offline K-turn/cusp analysis (Section~\ref{sec:cusp-repro}) \\
+    \texttt{log\_goal.py} & Logs every \texttt{/plan} replan (sequence-numbered CSVs), \texttt{/odom} and \texttt{/cmd\_vel} for one goal, for offline K-turn/cusp analysis (Section~\ref{sec:cusp-repro}) \\
     \texttt{\seqsplit{CuspStraightenerSmoother}} & \texttt{nav2\_core::Smoother} plugin resolving the reversal-cusp freeze (Section~\ref{sec:cusp-smoother-v2}); locked-in production configuration \\
     \texttt{\seqsplit{IsPathValidDebouncedCondition}} & Custom BT.CPP condition node requiring consecutive failed validity checks before replanning; implemented and hardware-tested, currently reverted/deselected (Section~\ref{sec:cusp-followon-reverted}) \\
     \texttt{\seqsplit{PathDeviationCritic}} & Custom MPPI critic pulling deviated trajectories toward a lookahead path point; implemented and tested, currently reverted/deselected (Section~\ref{sec:cusp-followon-reverted}) \\
@@ -109,15 +114,9 @@ must be followed in order, using \texttt{SIGINT} (Ctrl-C) exclusively:
 \section{Source Code and Data Availability}
 \label{app:source-availability}
 
-% TODO: fill in with however your faculty/supervisor wants source
-% code and raw data supplied - e.g. a git repository URL, or "supplied
-% on the accompanying electronic data carrier as specified in
-% guideline Section 4.2.7". If any data is restricted (see guideline
-% Section 4.1.2), note that here instead.
-
 The complete, version-controlled source code for the simulation
 stack (Chapter~\ref{ch:sim-stack}), the hardware bridge
-(Chapter~\ref{ch:hardware-bridge}), and all calibration/diagnostic
+(Chapter~\ref{ch:hardware-bridge}) and all calibration/diagnostic
 tooling (Appendix~\ref{app:tooling}) referenced throughout this
-thesis is supplied on the accompanying electronic data carrier /
-repository: \texttt{TODO: path or URL}.
+thesis is supplied in the accompanying repository:
+\url{https://github.com/amitsajeev-byte/qcar_nav_stack}.

@@ -6,7 +6,7 @@
 
 This thesis set out to migrate a Nav2-based navigation stack for an
 Ackermann-steered vehicle, the Quanser QCar, from a validated Gazebo
-simulation onto the physical robot, and to identify and address the
+simulation onto the physical robot and to identify and address the
 sim-to-real gap encountered along the way
 (Section~\ref{sec:problem-statement}). Each of the four sub-questions
 posed in the introduction is answered directly by one methodology
@@ -14,40 +14,45 @@ chapter:
 
 \begin{itemize}
   \item \textbf{Simulation-stack structure} (Chapter~\ref{ch:sim-stack}):
-    the stack was migrated twice -- first from a hand-rolled bicycle-model
-    inversion to \texttt{ros2\_control}'s Ackermann controller
-    (deliberately adopting real dead-reckoning odometry rather than
-    simulation ground truth, so the eventual hardware migration would
-    not have to absorb that discrepancy on top of everything else),
-    then to a direct Gazebo drive plugin -- which, as
-    Section~\ref{sec:odom-regression} documents, quietly reverted
-    \texttt{/odom} back to ground truth despite the topic name and
-    intent staying the same, a discrepancy this thesis surfaces rather
-    than leaves uncorrected.
-  \item \textbf{Bridging incompatible ROS~2 distributions}
-    (Chapter~\ref{ch:hardware-bridge}): native ROS~2 communication
+    the stack was migrated twice. It moved from a hand-rolled
+    bicycle-model inversion to \texttt{ros2\_control}'s Ackermann
+    controller, deliberately adopting real dead-reckoning odometry
+    rather than simulation ground truth, so the eventual hardware
+    migration would not have to absorb that discrepancy on top of
+    everything else. It then moved to a direct Gazebo drive plugin.
+    As Section~\ref{sec:odom-regression} documents, this plugin
+    quietly reverted \texttt{/odom} back to ground truth despite the
+    topic name and intent staying the same. This thesis surfaces
+    that discrepancy rather than leaving it uncorrected.
+  \item \textbf{Bridging the QCar's onboard compute}
+    (Chapter~\ref{ch:hardware-bridge}): the vehicle's Jetson TX2 could
+    not run the project's ROS~2 Humble stack natively. Its 32\,GB
+    eMMC had no realistic room for a second full ROS~2 installation
+    alongside its factory software. Native ROS~2 communication
     between the vehicle's onboard ROS~2 Dashing and the development
-    host's ROS~2 Humble was confirmed, through direct testing rather
-    than assumption, to be impossible at the DDS protocol level. A
-    TCP/JSON bridge was designed and built that presents the physical
-    robot to the rest of the navigation stack as an ordinary ROS~2
-    robot, with LiDAR angle-convention, odometry, steering-trim, and
-    inter-machine clock-synchronisation corrections layered on top to
-    bring the bridged data to a fidelity usable by AMCL and Nav2.
+    host's ROS~2 Humble was also confirmed, through direct testing
+    rather than assumption, to be impossible at the DDS protocol
+    level. A TCP/JSON bridge was designed and built that
+    presents the physical robot to the rest of the navigation stack
+    as an ordinary ROS~2 robot. LiDAR angle-convention, odometry,
+    steering-trim and inter-machine clock-synchronisation corrections
+    are layered on top, bringing the bridged data to a fidelity usable
+    by AMCL and Nav2.
   \item \textbf{Actuator identification and calibration}
     (Chapters~\ref{ch:hardware-bridge}--\ref{ch:calibration}): an
     uncalibrated throttle mapping (2.6--2.7$\times$ overshoot) was
     corrected to within 5\% accuracy across
-    \SIrange{0.3}{0.5}{\meter\per\second} via an empirical duty sweep;
-    a large ($\approx$\SI{2}{\second}) apparent coasting delay was
+    \SIrange{0.3}{0.5}{\meter\per\second} via an empirical duty sweep.
+    A large ($\approx$\SI{2}{\second}) apparent coasting delay was
     ultimately traced not to physical drivetrain dynamics but to a
     ring-buffer artefact in the vendor hardware abstraction layer's
-    task-based I/O mode, reducing stiction delay and stop latency by
-    more than an order of magnitude once corrected; and, independently,
-    a real $\approx$39\% steering-gain error -- separate from, and not
-    fixed by, the vehicle's zero-point trim -- was characterised
+    task-based I/O mode, reducing start-up delay and stop latency by
+    more than an order of magnitude once corrected. Independently,
+    a real $\approx$39\% steering-gain error was characterised
     through a seven-point sweep and corrected to $\approx$5.6\%
-    residual error (Section~\ref{sec:steering-gain}).
+    residual error (Section~\ref{sec:steering-gain}). This error was
+    separate from the vehicle's zero-point trim and was not fixed by
+    it.
   \item \textbf{Closed-loop validation} (Chapter~\ref{ch:nav-integration}):
     the bridged, calibrated vehicle was shown to complete real Nav2
     goals requiring both straight driving and turning, using a custom
@@ -56,69 +61,109 @@ chapter:
     next. A separate execution-side freeze at reversal cusps during
     K-turn manoeuvres in tight spaces was diagnosed to MPPI's own
     cusp-arrival gating and resolved with a custom path-smoothing
-    plugin, cutting a representative manoeuvre's mean duration from
+    plugin. This cut a representative manoeuvre's mean duration from
     \SI{110.2}{\second} (with recoveries) to \SI{43.9}{\second} (with
-    none) in simulation, and validated directly on the physical vehicle
-    across two independent goals with zero recoveries in either
-    (Section~\ref{sec:cusp-freeze}).
+    none) in simulation. The fix was validated directly on the
+    physical vehicle across two independent goals, with zero
+    recoveries in either (Section~\ref{sec:cusp-freeze}).
 \end{itemize}
 
-Chapter~\ref{ch:results} quantified the resulting gap: actuator
+Chapter~\ref{ch:results} quantified the resulting gap. Actuator
 response now tracks commanded speed within 5\% (down from a
-2.6--2.7$\times$ error), and stop-latency/coast behaviour was reduced
-from roughly 2.4\,s and up to 3$\times$ the commanded stop distance to
-approximately 0.5\,s and $\approx$\SI{0.1}{\meter}, a residual fully
-explained by ordinary linear velocity decay rather than any remaining
-unexplained mechanism.
+2.6--2.7$\times$ error). Stop-latency/coast behaviour was reduced
+from roughly 2.4\,s and up to 3$\times$ the commanded stop distance,
+to approximately 0.5\,s and $\approx$\SI{0.1}{\meter}. This residual
+is fully explained by ordinary linear velocity decay, not by any
+remaining unexplained mechanism.
 
 \subsection{Critical Reflection}
 \label{sec:critical-reflection}
 
 What worked well in this project was the discipline of measuring
-directly on hardware rather than trusting a plausible-sounding
-explanation: four of this thesis's most significant findings (the
-protocol-version incompatibility in Section~\ref{sec:rmw-incompatibility},
-the sim-vs-real overshoot ratio in Section~\ref{sec:sim-vs-real}, the
-buffering defect in Section~\ref{sec:readmode-bug}, and the
-reversal-cusp freeze in Section~\ref{sec:cusp-freeze}) were each, at
-some point, plausibly attributable to a simpler cause -- localisation
-error, a request-delivery bug, physical coasting, a tuning-only
-gain problem -- that direct measurement subsequently ruled out. The
-cusp-freeze investigation additionally illustrates the same discipline
-applied to solutions, not only diagnoses: three plausible fix attempts
-and two later follow-on refinements were each tested directly against
-hardware or a controlled reproduction, found wanting by measurement
-rather than intuition, and reverted with the evidence that ruled them
-out recorded rather than discarded. What could have gone better is
+directly on hardware, rather than trusting a plausible-sounding
+explanation. This thesis's four most significant findings are the
+protocol-version incompatibility in
+Section~\ref{sec:rmw-incompatibility}, the sim-vs-real overshoot
+ratio in Section~\ref{sec:sim-vs-real}, the buffering defect in
+Section~\ref{sec:readmode-bug} and the reversal-cusp freeze in
+Section~\ref{sec:cusp-freeze}. Each was, at some point, plausibly
+attributable to a simpler cause: localisation error, a
+request-delivery bug, physical coasting, or a tuning-only gain
+problem. Direct measurement subsequently ruled each of these out.
+
+The cusp-freeze investigation additionally illustrates the same
+discipline applied to solutions, not only diagnoses. Three plausible
+fix attempts and two later follow-on refinements were each tested
+directly against hardware or a controlled reproduction. Each was
+found wanting by measurement rather than intuition, then reverted.
+The evidence that ruled it out was recorded, not discarded.
+What could have gone better is
 equally clear from Section~\ref{sec:active-braking}: a reactive
 control design was deployed to physical hardware before it had been
-adequately traced through or simulated, and it produced a genuine
-safety incident. That the incident caused no lasting harm does not
-make the shortcut it resulted from acceptable practice, and this
+adequately traced through or simulated. It produced a genuine
+safety incident. The incident causing no lasting harm does not
+make the shortcut it resulted from acceptable practice. This
 thesis records it, unedited, as a documented counter-example to its
 own otherwise measurement-first methodology.
 
 A second, more structural limitation is that not every quantitative
 result in this thesis is a genuinely final, post-fix measurement.
-Section~\ref{sec:display-lag-interpretation} reports navigation
-timing figures measured while the buffering defect of
-Section~\ref{sec:readmode-bug} was still active, with only a
-qualitative (not re-instrumented) confirmation available after the
-fix, and Section~\ref{sec:results-sim-vs-real}'s sim-versus-real
-comparison likewise predates both major fixes in
-Chapter~\ref{ch:calibration}. These are reported as open items rather
-than papered over, and the exact next steps to close them --
-re-running \texttt{monitor\_goal\_timing.py} and the six-point
-sim-versus-real sweep under the final, fixed configuration -- are
-specific and immediately actionable rather than vague.
+Not every claim of success, either, is backed by a repeated-trial
+statistic rather than a qualitative assessment.
+Section~\ref{sec:results-limitations} states these gaps in full, in
+one place, rather than leaving them scattered across individual
+chapters. Most notably, no systematic goal-reaching success-rate
+campaign was run. Two results -- navigation timing and the
+sim-versus-real comparison -- predate the project's own final fixes.
+These are reported as open items rather
+than papered over. The exact next steps to close each of them are
+specific and immediately actionable rather than vague, as the
+Prospects below make concrete.
 
 \section{Prospects}
 \label{sec:prospects}
 
-Beyond the two re-measurements identified above, three directions
-follow naturally from this thesis's findings:
+Each limitation named in Section~\ref{sec:results-limitations}
+motivates at least one item below. This project's hardware access
+concluded with the 2026-09-10 session reported throughout
+Chapter~\ref{ch:results}. Every item below is accordingly a direction
+for continuation work -- by this project or a successor -- rather than
+a next step this thesis itself still has the means to take:
 
 \begin{itemize}
+  \item \textbf{Re-running the two pre-fix measurements.}
+    \texttt{monitor\_goal\_timing.py} (Section~\ref{sec:display-lag})
+    and the six-point sim-versus-real sweep
+    (Section~\ref{sec:results-sim-vs-real}) were both measured before
+    the \texttt{readMode=0} fix. The sweep was also measured before
+    throttle calibration. Both would need a further QCar lab session
+    to re-run under the final configuration, closing
+    Section~\ref{sec:results-limitations}'s item~2 with genuine
+    post-fix numbers instead of a qualitative confirmation.
+  \item \textbf{A planned, repeated goal-reaching evaluation
+    campaign.} Closing Section~\ref{sec:results-limitations}'s item~1
+    directly, a fixed set of goal poses spanning straight-line,
+    gentle-turn and reversal geometries would each be repeated across
+    multiple trials. This would produce the single defensible
+    goal-reaching success-rate figure this thesis currently lacks.
+    This figure would be the natural companion to the K-turn-specific
+    2/2 hardware result already in hand (Section~\ref{sec:results-cusp}).
+  \item \textbf{Correcting the map/localisation scale bias.}
+    Section~\ref{sec:results-map-localization}'s ground-truth
+    benchmarking (closing Section~\ref{sec:results-limitations}'s
+    item~5) found a real, direction-consistent bias: map $-$4--7\%,
+    AMCL forward distance $-$6.7--10.6\% and growing, raw LiDAR range
+    $-$1.9--8.0\% and growing with distance. It characterised this
+    bias with a low-noise, five-point LiDAR calibration curve
+    (Equation~\ref{eq:lidar-bias-fit}), but did not apply any
+    correction. If the LiDAR driver exposes a range-scale or
+    range-offset parameter, applying Equation~\ref{eq:lidar-bias-fit}'s
+    fit and re-running
+    Sections~\ref{sec:results-map-quality}--\ref{sec:results-localization-accuracy}
+    would show directly whether correcting the sensor closes the
+    larger map- and AMCL-level gaps, or whether a second, independent
+    effect inside Cartographer's pose-graph optimisation also
+    contributes.
   \item \textbf{Closed-loop low-speed control.} This thesis's
     calibration (Section~\ref{sec:final-calibration}) explicitly
     identified the sub-\SI{0.25}{\meter\per\second} regime as a hard
@@ -129,62 +174,96 @@ follow naturally from this thesis's findings:
     mapping used throughout this thesis.
   \item \textbf{Deceleration-profile tuning for coast reduction.} The
     stop-latency residual characterised in Section~\ref{sec:results-stop-distance}
-    is now small, but not zero, and scales with cruise speed. Given
+    is now small, but not zero and scales with cruise speed. Given
     that active braking is explicitly ruled out on safety grounds
-    (Section~\ref{sec:active-braking}), a lower-risk avenue --
-    identified but not investigated within this thesis -- is tuning
+    (Section~\ref{sec:active-braking}), a lower-risk avenue is tuning
     the MPPI \texttt{GoalCritic}/deceleration profile in
     \texttt{nav2\_params.yaml} so the controller commands a lower
-    cruise speed during final approach to a goal, proportionally
-    shrinking (not eliminating) the coast without introducing any new
+    cruise speed during final approach to a goal. This was identified
+    but not investigated within this thesis. It would proportionally
+    shrink, not eliminate, the coast without introducing any new
     reactive control loop.
   \item \textbf{Generalising the diagnostic methodology.} This
     thesis's most transferable contribution may be procedural rather
-    than numeric: the recurring pattern of an internally
-    self-consistent software abstraction masking a stale or defective
-    input (Section~\ref{sec:readmode-bug}), and the specific
-    discipline of verifying a component's own upstream input rather
-    than only its internal consistency, is a general principle worth
-    testing on other buffered or task-based hardware interfaces beyond
-    the one vendor library examined here.
+    than numeric: an internally self-consistent software abstraction
+    can mask a stale or defective input (Section~\ref{sec:readmode-bug}).
+    The specific discipline of verifying a component's own upstream
+    input, not only its internal consistency, is a general principle
+    worth testing on other buffered or task-based hardware interfaces
+    beyond the one vendor library examined here.
   \item \textbf{Closing the simulated-versus-real replan-complexity gap.}
     Section~\ref{sec:cusp-hw-validation} found that real-hardware K-turn
     manoeuvres occasionally produce substantially higher per-replan
     cusp counts (8--10) than any simulation trial reproduced (maximum
     $\approx$3), without preventing either tested goal from succeeding.
-    The leading candidate explanations -- \texttt{SmacPlannerHybrid}'s
-    sensitivity to real, more awkward goal/environment geometry, or a
-    residual, session-specific clock-offset effect similar to the one
-    implicated in Section~\ref{sec:cusp-followon-reverted}'s reverted
-    \texttt{IsPathValidDebounced} attempt -- were identified but not
-    isolated, and remain open. Relatedly, a deviation-aware critic
-    weighting scheme -- easing a sampled trajectory's pull back toward
-    the exact planned path once it has deviated significantly, in
-    favour of a goal-direction target, rather than insisting on precise
-    reconvergence -- was proposed but not implemented, as a
-    controller-side complement to Section~\ref{sec:cusp-freeze}'s
-    path-preprocessing fix.
+    The leading candidate explanations were identified but not
+    isolated and remain open. One is \texttt{SmacPlannerHybrid}'s
+    sensitivity to real, more awkward goal/environment geometry. The
+    other is a residual, session-specific clock-offset effect similar
+    to the one implicated in Section~\ref{sec:cusp-followon-reverted}'s
+    reverted \texttt{IsPathValidDebounced} attempt. Relatedly, a
+    deviation-aware critic weighting scheme was proposed but not
+    implemented, as a controller-side complement to
+    Section~\ref{sec:cusp-freeze}'s path-preprocessing fix. The scheme
+    would ease a sampled trajectory's pull back toward the exact
+    planned path once it has deviated significantly, favouring a
+    goal-direction target instead of insisting on precise
+    reconvergence.
   \item \textbf{Hardware re-validation of the curvature-continuing
     smoother refinement.} Section~\ref{sec:cusp-continued-iteration}'s
-    two most recent refinements -- the \texttt{min\_lead\_distance} fix
-    to the cusp re-extension bug, and the curvature-continuing
-    extension itself -- were, at the time of writing, verified only in
-    simulation (a single smoke test for the curvature refinement, two
-    trials without directly observing the skip branch fire for
-    \texttt{min\_lead\_distance}). Both are strict generalisations of
-    the already hardware-validated straight-line mechanism and are
-    expected to transfer, but this thesis deliberately does not claim
-    hardware confirmation it does not have; repeating
+    two most recent refinements are the \texttt{min\_lead\_distance}
+    fix to the cusp re-extension bug and the curvature-continuing
+    extension itself. At the time of writing, both were verified only
+    in simulation: a single smoke test for the curvature refinement
+    and two trials without directly observing the skip branch fire
+    for \texttt{min\_lead\_distance}. Both are strict generalisations
+    of the already hardware-validated straight-line mechanism and are
+    expected to transfer. This thesis deliberately does not claim
+    hardware confirmation it does not have. Repeating
     Section~\ref{sec:cusp-hw-validation}'s two-goal real-vehicle test
     against this refined configuration is the immediate next step.
+  \item \textbf{IMU/odometry sensor fusion.} This thesis's pose
+    estimation between LiDAR updates relies solely on wheel-encoder
+    odometry (Section~\ref{sec:qcar-platform}); the QCar's onboard IMU
+    is present and readable through the vendor HAL/PAL library but was
+    never read by this project's software stack. Fusing the two via
+    an extended or unscented Kalman filter, for example the ROS~2
+    \texttt{robot\_localization} package, is a specified but unbuilt
+    extension: IMU and wheel odometry in, a filtered
+    \texttt{odom}$\rightarrow$\texttt{base\_link} transform out,
+    feeding AMCL exactly as the current unfiltered odometry does. It
+    was considered during this project but not implemented.
+  \item \textbf{Beyond navigation.} This thesis's scope, stated
+    explicitly in Section~\ref{sec:results-limitations}'s final item,
+    is reaching a given goal pose reliably. It does not address how
+    that goal pose is chosen, how the vehicle would react to an
+    obstacle Nav2's stock costmap layers do not already handle, or
+    sequencing multiple goals into a mission. This thesis's navigation
+    pipeline (Section~\ref{sec:qcar-platform}) uses only the 2D LiDAR;
+    no camera-based perception and no IMU data was used or needed for
+    pose-goal navigation. Perception-driven goal selection, dynamic
+    obstacle handling beyond the static/inflation costmap layers used
+    throughout and a mission-level task layer above
+    \texttt{navigate\_to\_pose} are the three most direct extensions
+    of this work into full autonomy. Each is substantial enough to be
+    its own follow-on project rather than a tuning task.
+  \item \textbf{Diagnosing the LiDAR scan-rendering freeze.}
+    Section~\ref{sec:results-limitations}'s item~7 records a scan
+    display freeze during sharp turns and sudden forward acceleration
+    that recurred throughout hardware testing but was never
+    root-caused. The immediate next step is determining whether the
+    freeze is confined to the RViz visualisation pipeline or also
+    affects the \texttt{/scan} stream Nav2's own controller consumes,
+    since only the latter would be a genuine navigation-accuracy
+    concern rather than a cosmetic one.
 \end{itemize}
 
 The QCar's navigation stack, as delivered by this thesis, reaches
 real closed-loop navigation goals on physical hardware with a
-sim-to-real gap that is now measured, explained, and in most respects
+sim-to-real gap that is now measured, explained and in most respects
 substantially reduced -- the original goal stated in
 Section~\ref{sec:problem-statement}. What remains open is narrower
 and better characterised than what this thesis began with: not
-``why doesn't this work,'' but two specific, already-scoped
+why the system does not work, but two specific, already-scoped
 measurements and two specific, already-identified directions for
 further improvement.

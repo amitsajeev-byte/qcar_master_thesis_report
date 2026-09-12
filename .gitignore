@@ -10,3 +10,4 @@
 *.synctex.gz
 *.fdb_latexmk
 *.fls
+_chat-backup/

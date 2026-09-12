@@ -9,18 +9,49 @@
 This chapter documents the development of the simulation-side
 navigation stack that Chapters~\ref{ch:hardware-bridge}
 through~\ref{ch:nav-integration} later migrate onto physical
-hardware. The stack went through two full drive-architecture
-migrations before reaching the form used for hardware bridging
-(Sections~\ref{sec:baseline-manual}--\ref{sec:second-migration}), and
-along the way surfaced a middleware-level parser defect
-(Section~\ref{sec:colon-bug}) and a four-part vehicle-dynamics bug
-pattern that recurred, largely unchanged, across two sibling packages
-(Section~\ref{sec:not-moving-bug}). The chapter closes with a
-behaviour-tree fix specific to Ackermann-steered vehicles
+hardware. The stack went through two full drive-architecture migrations before
+reaching the form used for hardware bridging
+(Sections~\ref{sec:baseline-manual}--\ref{sec:second-migration}).
+Along the way, it surfaced a four-part vehicle-dynamics bug pattern
+that recurred during testing of this drive architecture
+(Section~\ref{sec:not-moving-bug}). The chapter closes with
+a behaviour-tree fix specific to Ackermann-steered vehicles
 (Section~\ref{sec:bt-fix}).
 
-\section{Baseline: Manual Bicycle-Model Inversion}
+\section{Diagnostic Standard: Verification by Direct Measurement}
+\label{sec:methodology-overview}
+
+The empirical standard applied to every discrepancy in this thesis
+was established in this chapter. Section~\ref{sec:not-moving-bug}
+documents a four-part bug pattern encountered during testing of this
+drive architecture. None of its components were distinguishable by
+static inspection of the URDF or launch configuration alone. A
+simulated vehicle in freefall, one frozen inside a crashed physics
+server and one driving its wheels at complete slip with zero chassis
+motion all look superficially identical.
+
+Diagnosing each required directly comparing \texttt{/odom} position
+over several seconds of sustained commanded motion against the
+Gazebo server log, rather than reasoning from configuration alone.
+This became the project's standard verification method for any
+subsequent change to the simulation stack
+(Section~\ref{sec:diagnostic-method}). The same standard carried
+into the hardware validation phase of
+Chapters~\ref{ch:hardware-bridge}--\ref{ch:nav-integration}.
+
+\section{Baseline Manual Bicycle-Model Inversion}
 \label{sec:baseline-manual}
+
+Early experimentation approached the QCar as a generic four-wheeled
+robot with front-wheel steering, controllable in much the same way as
+a differential-drive platform. This was the simplest model to get the
+vehicle moving at all. It became clear soon after that this
+simplification did not hold: the QCar is genuinely Ackermann-steered,
+and a differential-drive-style controller has no way to express the
+coordinated left/right hub-angle split that Ackermann steering
+requires. This is what motivated computing a proper Ackermann
+inversion by hand, described next, as this chapter's first documented
+drive architecture.
 
 The navigation stack's earliest drive architecture used two
 independent \texttt{ros2\_control} \texttt{JointGroup} controllers
@@ -31,14 +62,14 @@ inverted the bicycle-model relationship of
 Equations~\ref{eq:bicycle-x}--\ref{eq:bicycle-theta} to compute a
 per-wheel velocity and steering-hub angle from an incoming
 \texttt{geometry\_msgs/Twist} on \texttt{/cmd\_vel}. This
-architecture worked, but duplicated the Ackermann inverse-kinematics
-logic that a purpose-built controller would otherwise provide, and --
-more importantly for a navigation stack meant to reach physical
-hardware -- could not support Nav2's recovery behaviours that require
-reversing, since the manual node had no reverse-driving logic of its
-own.
+architecture worked, but it duplicated the Ackermann
+inverse-kinematics logic that a purpose-built controller would
+otherwise provide. More importantly for a navigation stack meant to
+reach physical hardware, it could not support Nav2's recovery
+behaviours that require reversing, since the manual node had no
+reverse-driving logic of its own.
 
-\section{First Migration: \texttt{ros2\_control}'s \texttt{AckermannSteeringController}}
+\section{First Migration to \texttt{ros2\_control}'s \texttt{AckermannSteeringController}}
 \label{sec:first-migration}
 
 The first architectural migration replaced both custom
@@ -46,11 +77,11 @@ The first architectural migration replaced both custom
 with \texttt{ros2\_control}'s own
 \texttt{ackermann\_steering\_controller} / \texttt{AckermannSteeringController}
 plugin, configured via \texttt{config/qcar\_controllers.yaml}. This
-controller performs the same Ackermann inverse kinematics internally,
-and additionally publishes its own wheel-based odometry -- which
-this project deliberately adopted as the vehicle's \texttt{/odom}
-source in place of Gazebo's \texttt{gazebo\_ros\_p3d} ground-truth
-plugin (the latter was kept running, but remapped to
+controller performs the same Ackermann inverse kinematics
+internally and additionally publishes its own wheel-based odometry.
+This project deliberately adopted that odometry as the vehicle's
+\texttt{/odom} source, in place of Gazebo's \texttt{gazebo\_ros\_p3d}
+ground-truth plugin (the latter was kept running, but remapped to
 \texttt{/ground\_truth/odom} for debugging comparison only). This was
 a considered choice, not a default: ground-truth odometry is
 trivially available in simulation but has no equivalent on the
@@ -61,13 +92,13 @@ Developing and tuning the navigation stack against the same
 the start, avoided deferring that discrepancy to the eventual
 hardware migration.
 
-Because Nav2, AMCL, and \texttt{bt\_navigator} all hard-code an
-expectation that odometry arrives on \texttt{/odom} and driving
-commands are consumed from \texttt{/cmd\_vel}, and the new controller
-instead exposes these under its own namespaced topics
+Nav2, AMCL and \texttt{bt\_navigator} all hard-code an expectation
+that odometry arrives on \texttt{/odom} and driving commands are
+consumed from \texttt{/cmd\_vel}. The new controller instead exposes
+these under its own namespaced topics
 (\texttt{\textasciitilde/odometry}, \texttt{\textasciitilde/reference\_unstamped}),
-two \texttt{topic\_tools relay} nodes were added to the launch files
-to bridge the naming mismatch without modifying Nav2 itself.
+so two \texttt{topic\_tools relay} nodes were added to the launch
+files to bridge the naming mismatch without modifying Nav2 itself.
 
 \subsection{A Wheel-Axis Bug Exposed by the Migration}
 \label{sec:wheel-axis-bug}
@@ -82,15 +113,16 @@ which, combined with the yaw flip, silently inverted that wheel's
 effective rotation sense relative to a positive commanded velocity.
 The old \texttt{cmd\_vel\_to\_drive.py} had manually compensated for
 this by commanding \texttt{[-speed, +speed]} to the left/right wheel
-velocities respectively; the new controller had no such
-compensation, and computed wheel odometry that did not match the
-vehicle's real motion direction. The fix -- correcting the
-\texttt{<axis>} declaration on the affected joint directly, rather
-than perpetuating a sign-flip workaround downstream in every
-consumer of that joint -- illustrates a pattern worth stating
-explicitly: a URDF geometry defect that is silently absorbed by one
-consumer's ad hoc compensation will resurface, often with a confusing
-symptom, the moment that consumer is replaced.
+velocities respectively. The new controller had no such
+compensation and computed wheel odometry that did not match the
+vehicle's real motion direction.
+
+The fix corrected the \texttt{<axis>} declaration on the affected
+joint directly, rather than perpetuating a sign-flip workaround
+downstream in every consumer of that joint. It illustrates a pattern
+worth stating explicitly: a URDF geometry defect that is silently
+absorbed by one consumer's ad hoc compensation will resurface, often
+with a confusing symptom, the moment that consumer is replaced.
 
 Listing~\ref{lst:wheel-axis} shows the two rear drive-wheel joints as
 they stand in the corrected URDF: the left joint's mesh-mirroring yaw
@@ -120,13 +152,13 @@ compensation since its origin carries no mirroring rotation.
 
 \paragraph{Why the sign flip happens: axes live in the joint's own, rotated frame.}
 The mechanism behind this bug is a direct consequence of one URDF
-convention that is easy to overlook: a joint's \texttt{<axis>} vector
-is expressed in the joint's \emph{own} local frame -- the frame
-produced by applying that same joint's \texttt{<origin>} rotation to
-its parent link's frame -- not directly in the parent link's (here,
-\texttt{base}'s) frame. The rear-right joint's origin carries no
+convention that is easy to overlook: a joint's \texttt{<axis>}
+vector is expressed in the joint's \emph{own} local frame, not
+directly in the parent link's (here, \texttt{base}'s) frame. That
+local frame is produced by applying the joint's own \texttt{<origin>}
+rotation to its parent link's frame. The rear-right joint's origin carries no
 rotation (\texttt{rpy="0 0 0"}), so its joint frame is identical to
-\texttt{base}'s frame, and \texttt{axis="0 1 0"} means exactly
+\texttt{base}'s frame and \texttt{axis="0 1 0"} means exactly
 $+Y$ in the vehicle's own reference frame. The rear-left joint's
 origin, in contrast, is yawed \ang{180} about $Z$
 (\texttt{rpy="0 0 3.14"}) so its mesh renders mirrored on the correct
@@ -135,128 +167,58 @@ and $Y$ axes to their negatives while leaving $Z$ unchanged
 ($X \to -X$, $Y \to -Y$), so that joint's \emph{local} $+Y$ direction
 already points along \emph{base}'s $-Y$ direction before the
 \texttt{<axis>} element is even considered. Declaring
-\texttt{axis="0 1 0"} on the rear-left joint -- the value that looks,
-by simple inspection, like ``the same axis as the right wheel'' --
-therefore actually commands rotation about \texttt{base}'s $-Y$, the
+\texttt{axis="0 1 0"} on the rear-left joint looks, by simple
+inspection, like ``the same axis as the right wheel.'' It therefore
+actually commands rotation about \texttt{base}'s $-Y$ -- the
 opposite physical sense from the right wheel's \texttt{base}-frame
-$+Y$, for the identical signed joint velocity. Negating it to
-\texttt{axis="0 -1 0"} (Listing~\ref{lst:wheel-axis}) cancels the
-already-applied yaw, restoring both wheels to rotating about the same
-\texttt{base}-frame axis for the same commanded sign -- the fix is
-not ``pick whichever sign makes it drive forward'' by trial and
-error, but a direct, derivable consequence of the joint's own origin
-rotation, which is why it generalises immediately to any other
-mirrored-mesh joint pair in this or a similar URDF.
+$+Y$ -- for the identical signed joint velocity.
 
-\subsection{A URDF Parser Defect in \texttt{gazebo\_ros2\_control}}
-\label{sec:colon-bug}
+Negating it to \texttt{axis="0 -1 0"} (Listing~\ref{lst:wheel-axis})
+cancels the already-applied yaw, restoring both wheels to rotating
+about the same \texttt{base}-frame axis for the same commanded sign.
+The fix is not ``pick whichever sign makes it drive forward'' by
+trial and error -- it is a direct, derivable consequence of the
+joint's own origin rotation, which is why it generalises immediately
+to any other mirrored-mesh joint pair in this or a similar URDF. This
+particular compensation was specific to the URDF as it stood at this
+stage of the project; it was later reverted once the project reached
+its final, direct-drive architecture (Section~\ref{sec:second-migration}).
 
-While adding explanatory comments to the URDF for the wheel-axis fix
-above, \texttt{controller\_manager} began failing to start
-altogether -- with all downstream symptoms that implies
-(\texttt{joint\_state\_broadcaster} and the new controller never
-spawning, \texttt{/odom} never appearing, and no \texttt{map} TF
-being published either, since nothing in the chain that would
-produce it ever started). The failure was silent: no controller
-spawner logged an error explaining \emph{why} it timed out waiting
-for \texttt{controller\_manager}.
-
-Isolating the cause required a delta-debugging-style bisection of the
-URDF file against the actual parsing code path, since multi-line
-comments, apostrophes, and file length were all plausible-looking red
-herrings that turned out not to matter. The root cause was found in
-how \texttt{gazebo\_ros2\_control} starts its internally-managed
-\texttt{controller\_manager} node: the plugin passes the entire
-processed URDF as a single \texttt{--param
-robot\_description:=<xml>} command-line-style argument, which
-\texttt{rcl}'s parameter-override grammar parses looking for a
-\texttt{node\_name:param\_name} pattern. That grammar treats
-\emph{any} colon immediately followed by a space --
-\texttt{": "} -- anywhere in the argument string as a potential
-separator, including inside an XML comment that a human reader would
-never consider part of the "real" content. A direct reproduction
-using \texttt{rclpy}'s own argument parser confirmed the mechanism
-precisely: \texttt{"hello: world"} fails to parse while
-\texttt{"hello:world"} (no space) succeeds, and \texttt{package://}
-URIs or \texttt{foo:=bar} remappings are unaffected since neither
-places a bare space directly after a colon.
-
-This is not specific to this project's URDF; it is a property of any
-\texttt{gazebo\_ros2\_control}-based setup, and is recorded here as a
-general finding: \textbf{a URDF or xacro file must never contain the
-literal sequence colon-followed-by-space, including inside comments},
-or \texttt{controller\_manager} fails to start with no diagnostic
-pointing at the actual cause.
-
-\section{Porting the Navigation Stack to ROS~2 Humble / Gazebo Classic}
-\label{sec:humble-conversion}
-
-A sibling package in this project's workspace had been authored
-against ROS~2 Jazzy and the newer Gazebo Sim (Harmonic) simulator --
-the \texttt{gz sim} binary family, \texttt{ros\_gz\_sim} /
-\texttt{ros\_gz\_bridge} integration, and \texttt{gz-sim-*-system}
-world plugins -- none of which are available on this project's
-ROS~2 Humble / Ubuntu 22.04 / Gazebo Classic~11 host. Rather than
-install a second, newer simulator stack alongside the one already
-validated and working for the rest of this thesis's packages
-(Section~\ref{sec:first-migration}), the package was converted to
-Gazebo Classic, matching every other package in this project.
-Table~\ref{tab:gz-sim-conversion} summarises the conversion, which
-generalises directly to any future package encountered that was
-authored against Gazebo Sim / Jazzy-era tutorials.
-
-\begin{table}[htbp]
-  \centering
-  \caption{Gazebo Sim (Jazzy) to Gazebo Classic (Humble) translation table.}
-  \label{tab:gz-sim-conversion}
-  \small
-  \begin{tabular}{@{}p{4.2cm}p{4.2cm}p{5.5cm}@{}}
-    \toprule
-    Gazebo Sim (source) & Gazebo Classic (target) & Notes \\
-    \midrule
-    \texttt{ros\_gz\_sim} / \texttt{ros\_gz\_bridge} (package.xml) & \texttt{gazebo\_ros} / \texttt{gazebo\_plugins} & \\
-    \texttt{gpu\_lidar} sensor + gz-sim system plugin & \texttt{type="ray"} + \texttt{\seqsplit{libgazebo\_ros\_ray\_sensor.so}} & \\
-    gz-sim \texttt{imu} sensor & classic \texttt{imu} + \texttt{\seqsplit{libgazebo\_ros\_imu\_sensor.so}} & \\
-    \texttt{\seqsplit{gz-sim-joint-state-publisher-system}} & removed entirely & Not needed; the drive plugin's own \texttt{publish\_wheel\_tf} broadcasts wheel/steering TF directly \\
-    \texttt{\seqsplit{gz-sim-ackermann-steering-system}} & \texttt{\seqsplit{libgazebo\_ros\_ackermann\_drive.so}} & Classic plugin auto-computes wheelbase/track/radius from URDF geometry; the gz-sim system required stating them explicitly \\
-    5$\times$ \texttt{<plugin filename="gz-sim-*-system">} (world SDF) & deleted entirely & Classic's \texttt{gzserver} has physics, scene broadcast, and sensors built into its core, not opt-in systems \\
-    \texttt{gz sim} + \texttt{ros\_gz\_sim create} spawn + \texttt{ros\_gz\_bridge} node & \texttt{gazebo}/\texttt{gzserver} + \texttt{gazebo\_ros spawn\_entity.py} & No bridge node needed; classic plugins publish onto ROS~2 topics directly \\
-    \texttt{GZ\_SIM\_RESOURCE\_PATH} env-var for mesh resolution & not needed & \texttt{gazebo\_ros} registers its own \texttt{package://} resolver \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-One element of the original file required \emph{no} change: the
-\texttt{<gazebo reference="link">\allowbreak<material>Gazebo/X</material>\allowbreak</gazebo>}
-material-script blocks are classic-Gazebo-native syntax that happened
-to already be present and compatible, a reminder that a systematic
-conversion still benefits from checking each element rather than
-assuming every gz-sim-authored construct needs translating.
-
-\section{Second Migration: The Direct Drive Plugin}
+\section{Second Migration to the Direct Drive Plugin}
 \label{sec:second-migration}
 
-The navigation stack's final drive architecture -- the one this
-thesis's hardware bridge (Chapter~\ref{ch:hardware-bridge}) targets
--- drops \texttt{ros2\_control} entirely in favour of driving the
-robot through \texttt{libgazebo\_ros\_ackermann\_drive.so}\allowbreak{} directly,
+The navigation stack's final drive architecture is the one this
+thesis's hardware bridge (Chapter~\ref{ch:hardware-bridge}) targets.
+It is also the configuration this thesis's own results are
+ultimately built on. It drops \texttt{ros2\_control} entirely,
+driving the robot instead through
+\texttt{libgazebo\_ros\_ackermann\_drive.so}\allowbreak{} directly,
 declared in a \texttt{<gazebo>} block in the URDF rather than through
-a separate controller-manager configuration file, matching the
-approach already adopted for the sibling package during the Humble
-conversion above. This plugin subscribes to \texttt{/cmd\_vel} and
-publishes \texttt{/odom} and the \texttt{odom} $\rightarrow$
-\texttt{base} TF transform directly, again auto-computing wheelbase,
-track width, and wheel radius from URDF joint and collision geometry
-at spawn time -- removing an entire category of configuration
-drift risk where a controller's stated geometry parameters could
-silently fall out of sync with the URDF's actual geometry, which had
-been possible (if not observed) under the first migration's
+a separate controller-manager configuration file. This
+is the architecture that both preceding migrations were, in
+hindsight, steps toward. The manual bicycle-model inversion of
+Section~\ref{sec:baseline-manual} proved the Ackermann kinematics
+were necessary at all. The first migration of
+Section~\ref{sec:first-migration} proved that a purpose-built
+controller could own that kinematics and its own odometry. This
+migration removes the last piece of custom controller-manager
+configuration standing between the URDF and the vehicle's actual
+behaviour in simulation.
+
+This plugin subscribes to \texttt{/cmd\_vel} and publishes
+\texttt{/odom} and the \texttt{odom} $\rightarrow$ \texttt{base} TF
+transform directly, again auto-computing wheelbase, track width and
+wheel radius from URDF joint and collision geometry at spawn time.
+Doing so removes an entire category of configuration drift risk, where a
+controller's stated geometry parameters could silently fall out of
+sync with the URDF's actual geometry -- something that had been
+possible, if not observed, under the first migration's
 \texttt{ros2\_control} YAML-based configuration. This is the
 architecture described in Section~\ref{sec:gazebo}'s account of the
-drive plugin, and the one whose real-world calibration
+drive plugin and the one whose real-world calibration
 Chapter~\ref{ch:calibration} presents.
 
-\subsection{A Quiet Regression: Odometry Reverts to Ground Truth}
+\subsection{A Quiet Regression Where Odometry Reverts to Ground Truth}
 \label{sec:odom-regression}
 
 This migration has one consequence worth stating explicitly, because
@@ -277,47 +239,48 @@ the same topic name and message type the first migration deliberately
 chose \emph{instead of} ground truth.
 
 This is not a bug in the sense the rest of this chapter uses the
-word -- the plugin behaves exactly as its own source dictates, and
-nothing in this project's testing depended on \texttt{/odom} actually
-drifting in simulation. It is, however, a genuine and previously
-unrecorded discrepancy between this thesis's stated intent (train
-against the same \emph{kind} of odometry the physical robot will
-have) and what the final simulation configuration actually exercises,
-and it is worth stating plainly rather than leaving the earlier
-claim uncorrected: \textbf{only the physical QCar's own odometry
+word. The plugin behaves exactly as its own source dictates.
+Nothing in this project's testing depended on \texttt{/odom} actually
+drifting in simulation.
+
+It is, however, a genuine and previously unrecorded discrepancy
+between this thesis's stated intent -- training against the same
+\emph{kind} of odometry the physical robot will have -- and what the
+final simulation configuration actually exercises. It is worth
+stating plainly rather than leaving the earlier claim uncorrected:
+\textbf{only the physical QCar's own odometry
 (Chapter~\ref{ch:hardware-bridge}, Section~\ref{sec:onboard-bridge-odom})
 is genuine encoder-based dead reckoning in this project; the
 simulation's final \texttt{/odom} is ground truth, exactly like the
 \texttt{gazebo\_ros\_p3d} source it was originally meant to replace}.
-Framed in terms of Section~\ref{sec:sim-to-real-concept}'s sim-to-real
-gap taxonomy, this means the localisation/odometry accuracy gap
-between simulation and hardware in this project is not purely an
-empirically discovered discrepancy -- it is, in part, structurally
-guaranteed by this architecture, since the simulated AMCL/Nav2 stack
-is given a perfect motion estimate that its real-hardware counterpart
-can never have. Any future comparison of localisation accuracy
-between simulation and hardware should account for this rather than
-treating the two \texttt{/odom} streams as like for like.
+
+Framed in terms of Section~\ref{sec:sim-to-real-concept}'s
+sim-to-real gap taxonomy, this means the localisation/odometry
+accuracy gap between simulation and hardware in this project is not
+purely an empirically discovered discrepancy. It is, in part,
+structurally guaranteed by this architecture, since the simulated
+AMCL/Nav2 stack is given a perfect motion estimate that its
+real-hardware counterpart can never have. Any future comparison of
+localisation accuracy between simulation and hardware should account
+for this, rather than treating the two \texttt{/odom} streams as
+like for like.
 
 \section{The ``Robot Not Moving Forward'' Bug Pattern}
 \label{sec:not-moving-bug}
 
-Both the sibling package's Humble conversion (Section~\ref{sec:humble-conversion})
-and this project's own second migration (Section~\ref{sec:second-migration})
-independently produced the same surface symptom immediately
-afterward: the simulated vehicle did not drive forward under a
-sustained \texttt{/cmd\_vel} command. In both cases, this single
+Testing this drive architecture (Section~\ref{sec:second-migration})
+surfaced a recurring symptom: the simulated vehicle did not drive
+forward under a sustained \texttt{/cmd\_vel} command. This single
 symptom turned out to be caused by a stack of independent bugs, each
-one masking the next until the previous was fixed -- a pattern
-significant enough, and confirmed to recur closely enough between
-the two packages, to warrant treating as a general defect signature
-for this plugin/vehicle combination rather than two unrelated
-incidents. Table~\ref{tab:not-moving-bugs} summarises all bugs found
-across both occurrences.
+one masking the next until the previous was fixed. The pattern
+recurred closely enough, across separate testing on this
+plugin/vehicle combination, to warrant treating it as a general
+defect signature rather than an isolated incident.
+Table~\ref{tab:not-moving-bugs} summarises the bugs found.
 
 \begin{table}[htbp]
   \centering
-  \caption{The recurring ``not moving forward'' bug pattern, as found in both affected packages.}
+  \caption{The recurring ``not moving forward'' bug pattern found while testing this drive architecture.}
   \label{tab:not-moving-bugs}
   \small
   \begin{tabular}{@{}p{0.6cm}p{5.3cm}p{7cm}@{}}
@@ -336,9 +299,9 @@ Listing~\ref{lst:wheel-collision-friction} shows the corrected form of
 one rear wheel link and its friction declaration, combining the fixes
 for bugs~1 and~2 from Table~\ref{tab:not-moving-bugs}: an explicit
 cylinder \texttt{<collision>} geometry (the \texttt{<visual>} mesh,
-omitted here, is unaffected and keeps using the STL), and a separate
+omitted here, is unaffected and keeps using the STL) and a separate
 \texttt{<gazebo reference="...">} block assigning Coulomb friction
-coefficients to that same link -- URDF has no wheel-friction concept
+coefficients to that same link. URDF has no wheel-friction concept
 of its own, so this Gazebo-specific extension is the only place that
 value is set at all.
 
@@ -363,95 +326,100 @@ value is set at all.
 
 \paragraph{Mechanism: how bugs 1 and 2 poison the control loop and physics, in numbers.}
 Section~\ref{sec:gazebo-pid-loop} and Section~\ref{sec:friction-theory}
-give the general theory bugs~1 and~2 exercise; concretely, for this
+give the general theory bugs~1 and~2 exercise
+\cite{astrom2008feedback}. Concretely, for this
 vehicle, a commanded \SI{0.3}{\meter\per\second} with a mesh-shaped
-(bug~1, radius $\to 0$) rear-wheel collision computes a target angular
-velocity of $0.3 / 0 \to \infty$ rad/s in
-Equation~\ref{eq:pid}'s error term -- not a large but finite number
-that a differently-tuned PID could still track, but a value with no
-finite representation at all, driving the linear-velocity PID's
-output straight to its saturation limit on the very first physics
-step regardless of gain. With the corrected \SI{0.036}{\meter} radius
-(Listing~\ref{lst:wheel-collision-friction}) that same command instead
-computes a finite target of $0.3 / 0.036 \approx \SI{8.33}{\radian\per\second}$,
-a well-posed, trackable error signal. Bug~2 (zero friction) then
-governs whether that correctly-spinning wheel produces any chassis
-motion at all: with $\mu_1 = \mu_2 = 0$, Section~\ref{sec:friction-theory}'s
-Coulomb limit permits zero tangential contact force regardless of how
-much normal force the vehicle's weight presses the wheel into the
-ground with, so the wheel can spin at exactly the commanded
-\SI{8.33}{\radian\per\second} indefinitely while contributing zero
-net force to the chassis -- the two bugs therefore fail at two
-different, independently necessary conditions (a well-posed control
-error, and a nonzero force limit to actually convert correct wheel
-spin into chassis thrust), which is why fixing either one alone still
-left the vehicle stationary and only fixing both together produced
-motion.
+(bug~1, radius $\to 0$) rear-wheel collision computes a target
+angular velocity of $0.3 / 0 \to \infty$ rad/s in
+Equation~\ref{eq:pid}'s error term. This is not a large but finite
+number that a differently-tuned PID could still track -- it is a
+value with no finite representation at all, driving the
+linear-velocity PID's output straight to its saturation limit on the
+very first physics step, regardless of gain. With the corrected
+\SI{0.036}{\meter} radius (Listing~\ref{lst:wheel-collision-friction})
+that same command instead computes a finite target of
+$0.3 / 0.036 \approx \SI{8.33}{\radian\per\second}$, a well-posed,
+trackable error signal.
 
-The first occurrence of this pattern also included a preceding, more
-basic defect specific to that package: its mesh URIs
+Bug~2 (zero friction) then governs whether that correctly-spinning
+wheel produces any chassis motion at all. With $\mu_1 = \mu_2 = 0$,
+Section~\ref{sec:friction-theory}'s Coulomb limit permits zero
+tangential contact force, regardless of how much normal force the
+vehicle's weight presses the wheel into the ground with. The wheel
+can therefore spin at exactly the commanded
+\SI{8.33}{\radian\per\second} indefinitely while contributing zero
+net force to the chassis.
+
+The two bugs fail at two different, independently necessary
+conditions: a well-posed control error and a nonzero force limit to
+actually convert correct wheel spin into chassis thrust. This is why
+fixing either one alone still left the vehicle stationary. Only
+fixing both together produced motion.
+
+Testing also surfaced a preceding, more basic defect: mesh URIs
 (\texttt{package://.../models/qcar/QCarBody.stl}-style paths) pointed
-at a directory layout copy-pasted from this project's own package
-rather than the sibling's actual \texttt{meshes/} layout and file
-names, so the robot had \emph{no} collision geometry at all and fell
-through the simulated ground plane -- confirmed directly via
-\texttt{/odom} tracking a $z$-position reaching approximately
-$-38{,}000$\,m. This is worth recording as a separate, more
-fundamental lesson: Gazebo Classic's URDF-to-SDF loader silently
-rewrites \texttt{package://} mesh URIs to \texttt{model://}, which
-only resolves via the \texttt{GAZEBO\_MODEL\_PATH} environment
-variable -- and since neither package's \texttt{package.xml} exports
-the \texttt{<gazebo\_ros gazebo\_model\_path=.../>} tag required for
+at the wrong directory layout, rather than the correct
+\texttt{meshes/} layout and file names. As a result, the robot had
+\emph{no} collision geometry at all and fell through the simulated
+ground plane -- confirmed directly via \texttt{/odom} tracking a
+$z$-position reaching approximately $-38{,}000$\,m.
+
+This is worth recording as a separate, more fundamental lesson:
+Gazebo Classic's URDF-to-SDF loader silently rewrites
+\texttt{package://} mesh URIs to \texttt{model://}, which only
+resolves via the \texttt{GAZEBO\_MODEL\_PATH} environment variable.
+Since the package's \texttt{package.xml} did not export the
+\texttt{<gazebo\_ros gazebo\_model\_path=.../>} tag required for
 that resolution, correcting the path string alone would not have
 been sufficient. The fix instead used xacro's \texttt{\$(find)}
 substitution to build \texttt{file://} URIs directly, which bypass
 package-path resolution entirely.
 
-The second occurrence additionally required a numerical-stability
-fix not initially anticipated: wheel rotational inertia values that
-were physically correct for a solid disk of the wheel's real mass and
-radius, but small enough in absolute terms to interact badly with the
-plugin's 100\,Hz PID control loop, producing an
-\texttt{Ogre::AxisAlignedBox::setExtents} assertion crash a few
+Further testing on this drive architecture also required a
+numerical-stability fix not initially anticipated: wheel rotational
+inertia values that were physically correct for a solid disk of the
+wheel's real mass and radius, but small enough in absolute terms to
+interact badly with the plugin's 100\,Hz PID control loop, producing
+an \texttt{Ogre::AxisAlignedBox::setExtents} assertion crash a few
 seconds into driving. Bumping wheel inertia roughly 20$\times$
-(\texttt{ixx=izz=0.0012}, \texttt{iyy=0.0022}) together with lowering
-the steering and linear-velocity PID gains resolved the crash; this
-value combination, once found working in the first occurrence, was
-reused directly in the second and confirmed stable there as well.
+(\texttt{ixx=izz=0.0012}, \texttt{iyy=0.0022}), together with
+lowering the steering and linear-velocity PID gains, resolved the
+crash and remained stable throughout subsequent testing.
 
-A further gain-tuning finding, specific to the second occurrence and
-worth stating as a general caution for reusing PID values across
-otherwise-identical vehicle configurations: a steering PID gain
-verified stable and accurate on a \emph{frictionless} wheel
-configuration produced a real turning radius roughly $6\times$ larger
-than commanded once realistic wheel friction (bug~2 above) was added,
-because the same low gain that was previously sufficient (with no
-resistive torque to overcome) could no longer turn the front hubs
-against a now-gripping, rolling tyre. The fix -- raising
-\texttt{left/right\_steering\_pid\_gain} from \texttt{0.02} to
-\texttt{3.0} -- was verified directly via TF lookups on the
-steering-hub joints during a commanded 1.0\,m-radius turn, confirming
-hub angles converging to the correct $\sim$\ang{15}--\ang{18}
-Ackermann inner/outer split, and via a circle fit to the resulting
-odometry trace, which recovered a turning radius of 0.87\,m against
-the 1.0\,m commanded -- a reasonable margin given the real-vs-ideal
-gap between the single-track model of
+A further gain-tuning finding is worth stating as a general caution
+for reusing PID values across otherwise-identical vehicle
+configurations. A steering PID gain verified stable and accurate on
+a \emph{frictionless} wheel configuration produced a real turning
+radius roughly $6\times$ larger than commanded, once realistic wheel
+friction (bug~2 above) was added. The same low gain that had
+previously been sufficient, with no resistive torque to overcome,
+could no longer turn the front hubs against a now-gripping, rolling
+tyre.
+
+The fix raised \texttt{left/right\_steering\_pid\_gain} from
+\texttt{0.02} to \texttt{3.0}. This was verified directly via TF
+lookups on the steering-hub joints during a commanded 1.0\,m-radius
+turn, confirming hub angles converging to the correct
+$\sim$\ang{15}--\ang{18} Ackermann inner/outer split. A circle fit to
+the resulting odometry trace recovered a turning radius of 0.87\,m
+against the 1.0\,m commanded -- a reasonable margin, given the
+real-vs-ideal gap between the single-track model of
 Section~\ref{sec:ackermann-kinematics} and the vehicle's true
 four-wheel geometry.
 
 \subsection{Diagnostic Method}
 \label{sec:diagnostic-method}
 
-A methodological point generalises from both occurrences of this bug
-pattern: none of these four bugs are visible from \texttt{ros2 topic
+A methodological point generalises from this bug pattern: none of
+these four bugs are visible from \texttt{ros2 topic
 list} or a static inspection of the URDF alone. A simulated robot
 that appears correctly configured can simultaneously be in freefall,
 frozen inside a crashed-but-still-running \texttt{gzserver} process,
-or driving its wheels at 100\% slip with zero real chassis motion --
-and none of these states are distinguishable without directly
-comparing \texttt{/odom} position over several seconds of sustained
-commanded motion, cross-checked against the Gazebo server log for
-silent \texttt{[Err]}/assertion lines. This became this project's
+or driving its wheels at 100\% slip with zero real chassis motion.
+None of these states are distinguishable without directly comparing
+\texttt{/odom} position over several seconds of sustained commanded
+motion, cross-checked against the Gazebo server log for silent
+\texttt{[Err]}/assertion lines. This became this project's
 standard verification method for any subsequent URDF or physics
 change to the simulation stack.
 
@@ -460,36 +428,40 @@ change to the simulation stack.
 
 \paragraph{How a behaviour tree actually executes.}
 A behaviour tree is evaluated by repeatedly ``ticking'' it from the
-root: each tick propagates down the tree and every node it reaches
-returns one of \texttt{SUCCESS}, \texttt{FAILURE}, or
-\texttt{RUNNING} (still in progress, re-tick next cycle) back up to
-its parent, and how a parent node interprets its children's results
-depends entirely on that parent's type. A \texttt{RoundRobin} node --
-the one this section's fix concerns -- ticks exactly one of its
-children per activation (advancing to the next child, wrapping back
-to the first, only once the currently-selected child itself returns
-\texttt{SUCCESS} or \texttt{FAILURE} rather than \texttt{RUNNING}),
-cycling through its full child list one at a time across repeated
-recovery attempts rather than trying all of them on a single
-activation. A \texttt{ReactiveFallback} (the parent of
-\texttt{RecoveryActions} in Listing~\ref{lst:bt-recovery}) instead
-re-ticks its children from the first one every single tick, moving on
-to the next only if the current one fails -- the two control-flow
-types are not interchangeable, and Nav2's stock recovery subtree pairs
-them deliberately: the outer \texttt{ReactiveFallback} re-checks
-whether a goal update has arrived (via the \texttt{GoalUpdated}
-condition node) before committing to whichever recovery action the
-inner \texttt{RoundRobin} has advanced to.
+root \cite{colledanchise2018bt}. Each tick propagates down the tree.
+Every node it reaches returns one of \texttt{SUCCESS},
+\texttt{FAILURE}, or \texttt{RUNNING} (still in progress, re-tick
+next cycle) back up to its parent. How a parent node interprets its
+children's results depends entirely on that parent's type.
+
+A \texttt{RoundRobin} node -- the one this section's fix concerns --
+ticks exactly one of its children per activation, advancing to the
+next child and wrapping back to the first, only once the
+currently-selected child itself returns \texttt{SUCCESS} or
+\texttt{FAILURE} rather than \texttt{RUNNING}. It cycles through its
+full child list one at a time across repeated recovery attempts,
+rather than trying all of them on a single activation.
+
+A \texttt{ReactiveFallback} (the parent of \texttt{RecoveryActions}
+in Listing~\ref{lst:bt-recovery}) instead re-ticks its children from
+the first one every single tick, moving on to the next only if the
+current one fails. The two control-flow types are not
+interchangeable. Nav2's stock recovery subtree pairs them
+deliberately: the outer \texttt{ReactiveFallback} re-checks whether a
+goal update has arrived, via the \texttt{GoalUpdated} condition node,
+before committing to whichever recovery action the inner
+\texttt{RoundRobin} has advanced to.
 
 A separate, functional (rather than purely physics-level) issue
 appeared once the vehicle was reliably driving: Nav2's default
-recovery behaviour tree round-robins through
+recovery behaviour tree \cite{macenski2020nav2} round-robins through
 \texttt{[ClearCostmaps, Spin(1.57\,rad), Wait(5\,s), BackUp(0.3\,m)]}
 whenever the active controller reports it cannot make further
 progress. The \texttt{Spin} recovery commands a pure in-place
-rotation -- physically impossible for an Ackermann-steered vehicle,
-whose steering angle has no effect while linear velocity is zero, so
-the vehicle simply cannot rotate without also translating. Roughly
+rotation. This is physically impossible for an Ackermann-steered
+vehicle: its steering angle has no effect while linear velocity is
+zero, so the vehicle simply cannot rotate without also translating.
+Roughly
 one in three recovery attempts was therefore a guaranteed no-op that
 burned its full timeout without attempting any corrective motion.
 
@@ -508,7 +480,7 @@ launch-time substitution could take effect.
 
 Listing~\ref{lst:bt-recovery} shows the resulting recovery fallback
 from the local behaviour-tree copy: a \texttt{RoundRobin} of clearing
-both costmaps, waiting, and backing up -- with no \texttt{<Spin>}
+both costmaps, waiting and backing up -- with no \texttt{<Spin>}
 node present at all, compared to the stock tree's four-way rotation
 through \texttt{[ClearCostmaps, Spin, Wait, BackUp]}.
 
@@ -531,25 +503,42 @@ through \texttt{[ClearCostmaps, Spin, Wait, BackUp]}.
 Because \texttt{RoundRobin} advances exactly one position per
 activation, dropping \texttt{Spin} from a four-child list to this
 three-child list is not merely ``the useless action happens less
-often'' -- it removes the guaranteed no-op activation entirely, so
-every single recovery activation now attempts a physically achievable
-action, and the cycle back to any one specific action (e.g.\ back to
-\texttt{BackUp} after it was last tried) also completes one activation
-sooner than it did with four children in the rotation.
+often.'' It removes the guaranteed no-op activation entirely, so
+every single recovery activation now attempts a physically
+achievable action. The cycle back to any one specific action --
+e.g.\ back to \texttt{BackUp} after it was last tried -- also
+completes one activation sooner than it did with four children in
+the rotation.
+
+In practice, this project's own navigation calls exclusively issue
+Nav2's \texttt{NavigateToPose} action for a single goal pose
+(Chapter~\ref{ch:nav-integration}). This makes
+\texttt{navigate\_to\_pose\_w\_replanning\_and\_recovery.xml} the
+behaviour tree actually exercised at runtime. The through-poses
+equivalent was patched identically for consistency, though it was
+never itself driven by this project's own goal-sending code.
+
+The patched \texttt{RecoveryFallback} subtree fires whenever the
+active controller reports it cannot make further progress toward the
+current goal, for example when the local planner fails to find a
+usable path around an obstacle. At that point the vehicle clears
+both costmaps, waits and backs up, in that order. The outer
+\texttt{NavigateToPose} tree then retries planning.
 
 \section{Summary of the Simulation-Stack Architecture}
 \label{sec:sim-stack-summary}
 
 By the end of this chapter's work, the simulation-side navigation
-stack consists of: a URDF-described vehicle driven directly by
-\texttt{libgazebo\_ros\_ackermann\_drive.so} (Section~\ref{sec:second-migration}),
-publishing ground-truth-derived \texttt{/odom} (Section~\ref{sec:odom-regression}
--- a quiet regression from the genuine dead-reckoning odometry the
-first migration, Section~\ref{sec:first-migration}, had deliberately
-adopted), with corrected wheel collision geometry, friction, and inertia
-(Section~\ref{sec:not-moving-bug}), tuned PID gains for both drive
-and steering, and a custom Ackermann-aware recovery behaviour tree
-(Section~\ref{sec:bt-fix}). This is the configuration
-Chapter~\ref{ch:hardware-bridge} treats as the reference to be
-matched -- as closely as the physical robot's own constraints allow
--- when bridging to hardware.
+stack has taken its final form. A URDF-described vehicle is driven
+directly by \texttt{libgazebo\_ros\_ackermann\_drive.so}
+(Section~\ref{sec:second-migration}), publishing ground-truth-derived
+\texttt{/odom} -- a quiet regression from the genuine dead-reckoning
+odometry the first migration (Section~\ref{sec:first-migration}) had
+deliberately adopted (Section~\ref{sec:odom-regression}). Wheel
+collision geometry, friction and inertia have all been corrected
+(Section~\ref{sec:not-moving-bug}), PID gains are tuned for both
+drive and steering and a custom Ackermann-aware recovery behaviour
+tree is in place (Section~\ref{sec:bt-fix}). This is the
+configuration Chapter~\ref{ch:hardware-bridge} treats as the
+reference to be matched, as closely as the physical robot's own
+constraints allow, when bridging to hardware.

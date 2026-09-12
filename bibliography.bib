@@ -4,12 +4,12 @@
 % TODO (you): double-check every entry below (volume/issue/page
 % numbers especially) against the publisher's own record before
 % submission - these were compiled from general knowledge of the
-% literature, not pulled live from a database, and DIN-norm citation
+% literature, not pulled live from a database and DIN-norm citation
 % requires verifiable accuracy (guideline 4.2.6).
 % ============================================================
 
 @article{macenski2022ros2,
-  author  = {Macenski, Steven and Foote, Tully and Gerkey, Brian and Lalancette, Chris and Woodall, William},
+  author  = {Macenski, Steve and Foote, Tully and Gerkey, Brian and Lalancette, Chris and Woodall, William},
   title   = {Robot Operating System 2: Design, architecture, and uses in the wild},
   journal = {Science Robotics},
   volume  = {7},
@@ -19,7 +19,7 @@
 }
 
 @inproceedings{macenski2020nav2,
-  author    = {Macenski, Steven and Mart{\'i}n, Francisco and White, Ruffin and Clavero, Jonatan Gines},
+  author    = {Macenski, Steve and Mart{\'i}n, Francisco and White, Ruffin and Clavero, Jonatan Gin{\'e}s},
   title     = {The Marathon 2: A Navigation System},
   booktitle = {2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
   year      = {2020},
@@ -27,7 +27,7 @@
 }
 
 @inproceedings{quigley2009ros,
-  author    = {Quigley, Morgan and Conley, Ken and Gerkey, Brian and Faust, Josh and Foote, Tully and Leibs, Jeremy and Wheeler, Rob and Ng, Andrew Y.},
+  author    = {Quigley, Morgan and Gerkey, Brian and Conley, Ken and Faust, Josh and Foote, Tully and Leibs, Jeremy and Berger, Eric and Wheeler, Rob and Ng, Andrew},
   title     = {ROS: an open-source Robot Operating System},
   booktitle = {ICRA Workshop on Open Source Software},
   year      = {2009}
@@ -51,52 +51,66 @@
   doi       = {10.1109/IROS.2004.1389727}
 }
 
-@book{thrun2005probabilistic,
-  author    = {Thrun, Sebastian and Burgard, Wolfram and Fox, Dieter},
-  title     = {Probabilistic Robotics},
-  publisher = {MIT Press},
-  year      = {2005}
+% Replaces the earlier thrun2005probabilistic book citation (Probabilistic
+% Robotics, MIT Press, 2005): no legal free copy of the book exists, so it was
+% never actually downloaded/accessed in this workspace. This CMU tech report,
+% by the book's own lead author, covers the same Bayes-filter/particle-filter
+% material and is freely self-hosted by Thrun -
+% qcar_updated/documents/references/thrun2000_probabilistic_algorithms_cmu.pdf.
+@techreport{thrun2000probrob,
+  author      = {Thrun, Sebastian},
+  title       = {Probabilistic Algorithms in Robotics},
+  institution = {School of Computer Science, Carnegie Mellon University},
+  number      = {CMU-CS-00-126},
+  year        = {2000}
 }
 
-@inproceedings{williams2016mppi,
-  author    = {Williams, Grady and Drews, Paul and Goldfain, Brian and Rehg, James M. and Theodorou, Evangelos A.},
-  title     = {Aggressive driving with model predictive path integral control},
-  booktitle = {2016 IEEE International Conference on Robotics and Automation (ICRA)},
-  pages     = {1433--1440},
-  year      = {2016},
-  doi       = {10.1109/ICRA.2016.7487277}
+% Replaces the earlier williams2016mppi (ICRA 2016, IEEE-paywalled) and
+% williams2017mppi (JGCD 2017, AIAA-paywalled) citations: neither has a legal
+% free copy anywhere online, so neither was ever actually downloaded/accessed
+% in this workspace. This arXiv preprint, by the same core authors, derives
+% the same MPPI/importance-sampling math these were cited for and is freely
+% available - qcar_updated/documents/references/
+% mppi_covariance_importance_sampling_williams2015_preprint.pdf.
+@misc{williams2015mppi,
+  author = {Williams, Grady and Aldrich, Andrew and Theodorou, Evangelos A.},
+  title  = {Model Predictive Path Integral Control using Covariance Variable Importance Sampling},
+  year   = {2015},
+  note   = {arXiv:1509.01149}
 }
 
-@article{williams2017mppi,
-  author  = {Williams, Grady and Aldrich, Andrew and Theodorou, Evangelos A.},
-  title   = {Model Predictive Path Integral Control: From Theory to Parallel Computation},
-  journal = {Journal of Guidance, Control, and Dynamics},
-  volume  = {40},
-  number  = {2},
-  pages   = {344--357},
-  year    = {2017},
-  doi     = {10.2514/1.G001921}
+% Replaces the earlier rajamani2011vehicle book citation (Vehicle Dynamics and
+% Control, Springer, 2011): no legal free copy of the book exists, so it was
+% never actually downloaded/accessed in this workspace. This CMU technical
+% report's own Sections 2.1/3.1 derive the identical single-track ("bicycle")
+% model this was cited for and is freely self-hosted -
+% qcar_updated/documents/references/path_tracking_snider2009.pdf.
+@techreport{snider2009pathtracking,
+  author      = {Snider, Jarrod M.},
+  title       = {Automatic Steering Methods for Autonomous Automobile Path Tracking},
+  institution = {Robotics Institute, Carnegie Mellon University},
+  number      = {CMU-RI-TR-09-08},
+  year        = {2009}
 }
 
-@book{rajamani2011vehicle,
-  author    = {Rajamani, Rajesh},
-  title     = {Vehicle Dynamics and Control},
-  edition   = {2nd},
-  publisher = {Springer},
-  year      = {2011},
-  doi       = {10.1007/978-1-4614-1433-9}
-}
-
-@inproceedings{maruyama2016exploring,
-  author    = {Maruyama, Yuya and Kato, Shinpei and Azumi, Takuya},
-  title     = {Exploring the performance of ROS2},
-  booktitle = {Proceedings of the 13th International Conference on Embedded Software (EMSOFT)},
-  year      = {2016},
-  doi       = {10.1145/2968478.2968502}
-}
+% Removed 2026-09-06: the only copy of this paper ever found is a Purdue
+% course-site mirror of ACM's own copyrighted, typeset proceedings PDF
+% (stamped "(c) 2016 ACM... DOI: 10.1145/2968478.2968502"), with no
+% indication that page had rights to redistribute it - unlike this
+% bibliography's other entries (arXiv preprints, author-hosted copies, or
+% a standards body's own free spec), this is someone else's copyrighted
+% work sitting on a site that doesn't own it. No author-hosted or arXiv
+% version exists (checked ResearchGate too - "Request PDF" only, already
+% ruled out elsewhere in this bibliography for the same reason). The one
+% claim this backed (ROS 2's RMW abstraction making multiple DDS vendors
+% interchangeable) is fully supported by macenski2022ros2 alone, which
+% states this explicitly in its own text - see that citation's uses in
+% Chapter 1 and Chapter 2. The PDF itself
+% (maruyama2016_ros2_performance_emsoft.pdf) is kept in the references
+% folder per this project's file-retention policy, but is no longer cited.
 
 @inproceedings{zhao2020sim2real,
-  author    = {Zhao, Wenshuai and Queralta, Jorge Pena and Westerlund, Tomi},
+  author    = {Zhao, Wenshuai and Queralta, Jorge Pe{\~n}a and Westerlund, Tomi},
   title     = {Sim-to-Real Transfer in Deep Reinforcement Learning for Robotics: a Survey},
   booktitle = {2020 IEEE Symposium Series on Computational Intelligence (SSCI)},
   pages     = {737--744},
@@ -111,23 +125,213 @@
   note         = {OMG Document formal/2015-04-10}
 }
 
-@manual{quanser2022qcar2,
+% Downloaded 2026-09-05, prompted by a full re-read of this thesis finding
+% Section 2.1.1's SPDP/SEDP/RTPS discovery discussion had no citation at all -
+% those specifics are defined here, not in the DCPS spec (omg2015dds) above.
+@manual{omg2014rtps,
+  organization = {Object Management Group},
+  title        = {The Real-time Publish-Subscribe Protocol (RTPS) DDS Interoperability Wire Protocol Specification, Version 2.2},
+  year         = {2014},
+  note         = {OMG Document formal/2014-09-01}
+}
+
+@manual{quanser2023qcar,
   organization = {Quanser Inc.},
-  title        = {QCar User Manual},
-  year         = {2022},
-  note         = {Product documentation, Quanser Inc.}
+  title        = {QCar System Hardware User Manual},
+  year         = {2023},
+  note         = {Version 1.0, 9 January 2023. Not to be confused with the
+    separate QCar~2 platform and its own documentation.}
 }
 
-@misc{eprosima_fastdds,
-  author = {{eProsima}},
-  title  = {Fast DDS Documentation},
-  year   = {2024},
-  note   = {\url{https://fast-dds.docs.eprosima.com/}, accessed 2026-08-23}
+% Added to cover Section 2.7's specific claim that "Quanser's own
+% troubleshooting documentation recommends" the +-30% PWM duty-cycle
+% saturation and 100%/s rate limiter -- verified directly against this
+% document's own Section B.e ("The QCar unpredictably shutdown while
+% driving with no display message"), which states this exact
+% recommendation, in these exact terms, to avoid a battery-brownout
+% shutdown. A distinct document from quanser2023qcar above (same
+% version/date, different title and content) - qcar_hardware/documents/
+% user_manual_troubleshooting.pdf.
+@manual{quanser2023troubleshooting,
+  organization = {Quanser Inc.},
+  title        = {QCar Troubleshooting User Manual},
+  year         = {2023},
+  note         = {Version 1.0, 9 January 2023}
 }
 
-% TODO: add citations for any further literature you bring in while
-% expanding Chapter 2 (Groundwork) - e.g. a specific AMCL paper
-% (Fox, Burgard, Thrun 1999, "Monte Carlo Localization"), any
-% path-planning references for the Smac Hybrid-A* planner used by
-% Nav2, or papers specific to your faculty's expected literature
-% depth for a Master's thesis.
+% Downloaded 2026-09-05, prompted by a full re-read of this thesis finding
+% Section 2.5.2's augmented-MCL recovery formula (recovery_alpha_slow/fast)
+% had no citation covering it specifically (the nearby thrun2000probrob
+% citation covers only the base MCL prediction-update-resample cycle). This
+% paper's "MCL with added random samples" comparison (Section 4.3-4.4) is the
+% closest verified academic anchor for the general random-injection-on-
+% recovery concept; the exact w_slow/w_fast exponential-moving-average
+% formulation itself is AMCL's own parameterisation of that concept, read
+% directly from its documented configuration (consistent with this thesis's
+% source-reading methodology elsewhere) - not verified to appear as this
+% specific formula in this paper's own equations.
+@article{thrun2001robustmcl,
+  author  = {Thrun, Sebastian and Fox, Dieter and Burgard, Wolfram and Dellaert, Frank},
+  title   = {Robust Monte Carlo Localization for Mobile Robots},
+  journal = {Artificial Intelligence},
+  volume  = {128},
+  number  = {1-2},
+  pages   = {99--141},
+  year    = {2001}
+}
+
+% TODO: DOI intentionally omitted below - not printed anywhere in the
+% downloaded PDF (qcar_updated/documents/references/
+% monte_carlo_localization_dellaert1999.pdf) itself and not verified against
+% IEEE Xplore. Look it up before submission rather than trust a guessed value.
+@inproceedings{dellaert1999mcl,
+  author    = {Dellaert, Frank and Fox, Dieter and Burgard, Wolfram and Thrun, Sebastian},
+  title     = {Monte Carlo Localization for Mobile Robots},
+  booktitle = {1999 IEEE International Conference on Robotics and Automation (ICRA)},
+  year      = {1999}
+}
+
+% TODO: DOI intentionally omitted below - the downloaded PDF
+% (qcar_updated/documents/references/occupancy_grids_elfes1989.pdf) shows only
+% "0018-9162/89/0600-0046$01.00" (the ISSN/pricing code) and page 46, no DOI.
+% Look it up before submission rather than trust a guessed value.
+@article{elfes1989occupancy,
+  author  = {Elfes, Alberto},
+  title   = {Using Occupancy Grids for Mobile Robot Perception and Navigation},
+  journal = {Computer},
+  volume  = {22},
+  number  = {6},
+  pages   = {46--57},
+  year    = {1989}
+}
+
+% Removed 2026-09-06, found during a re-verification pass: this entry's own
+% note claimed "an offline HTML snapshot... is kept alongside this file's
+% other references," but no such file was ever actually saved anywhere on
+% this system - a repeat attempt to fetch/save one today also failed (the
+% live URL 404s via a direct download and WebFetch alone doesn't leave a
+% retrievable local file). Per this project's own citation-integrity rule,
+% a source with no downloaded/accessed copy cannot be cited. The one claim
+% this was backing (Chapter 4, Fast DDS protocol-version incompatibility
+% between ROS 2 Dashing and Humble) is now cited to omg2014rtps instead,
+% which already legitimately documents the RTPS ProtocolVersion_t field
+% (1.0/1.1/2.0/2.1/2.2) this incompatibility mechanism depends on.
+
+% General acknowledgement only - not cited as the source of any specific
+% technical claim, formula, fact, or number anywhere in this thesis. Every
+% technical statement in this document is backed by one of the entries
+% above (or the thesis's own project artefacts); this entry exists solely
+% to disclose that AI assistance (Claude) was used for drafting and editing
+% support during the writing process. The actual guideline PDF
+% (leitfaden_abschlussarbeiten_en.pdf) was checked directly and contains
+% no explicit rule on AI-tool disclosure either way - this disclosure is
+% included as good academic practice, not because the guideline requires
+% or names it.
+@misc{anthropic2026claude,
+  author = {{Anthropic}},
+  title  = {Claude (Sonnet~5)},
+  year   = {2026},
+  note   = {AI assistant used for drafting and editing support; see
+    the Statement of Authorship for the scope of its use}
+}
+
+% Downloaded 2026-09-06, prompted by a full citation-coverage re-read of
+% Chapter 2: this general SLAM problem-definition sentence had no citation.
+% Already sitting downloaded-but-unused in the references folder since
+% 2026-08-23 (per this thesis's policy of keeping every downloaded file
+% regardless of whether it was cited at the time) - now actually cited.
+@article{cadena2016slam,
+  author  = {Cadena, Cesar and Carlone, Luca and Carrillo, Henry and Latif, Yasir and Scaramuzza, Davide and Neira, Jos{\'e} and Reid, Ian and Leonard, John J.},
+  title   = {Past, {P}resent, and {F}uture of {S}imultaneous {L}ocalization {A}nd {M}apping: {T}oward the {R}obust-{P}erception {A}ge},
+  journal = {IEEE Transactions on Robotics},
+  volume  = {32},
+  number  = {6},
+  pages   = {1309--1332},
+  year    = {2016},
+  doi     = {10.1109/TRO.2016.2624754}
+}
+
+% Downloaded 2026-09-06, addressing this file's own prior TODO below: Nav2's
+% SmacPlannerHybrid (Section 2.5, global planning) had no citation for its
+% underlying hybrid-A*/Reeds-Shepp approach. The direct source (Dolgov,
+% Thrun, Montemerlo, Diebel, "Path Planning for Autonomous Vehicles in
+% Unknown Semi-structured Environments," IJRR 2010) is SAGE-paywalled and
+% was never downloaded/accessed (see INDEX.md in the references folder).
+% This is the same authors' earlier, author-self-hosted workshop paper
+% covering the identical hybrid-A*/Reeds-Shepp method - freely available,
+% and actually downloaded and read for this citation.
+@inproceedings{dolgov2008hybridastar,
+  author    = {Dolgov, Dmitri and Thrun, Sebastian and Montemerlo, Michael and Diebel, James},
+  title     = {Practical Search Techniques in Path Planning for Autonomous Driving},
+  booktitle = {Proceedings of the First International Symposium on Search Techniques in Artificial Intelligence and Robotics (STAIR)},
+  year      = {2008}
+}
+
+% Downloaded 2026-09-06, addressing this file's own prior TODO below: Nav2's
+% behaviour-tree orchestration (Section 2.5, "Behavior Trees") had no
+% citation for the general behaviour-tree concept. Freely available on
+% arXiv.
+@misc{colledanchise2018bt,
+  author = {Colledanchise, Michele and {\"O}gren, Petter},
+  title  = {Behavior Trees in Robotics and {AI}: An Introduction},
+  year   = {2018},
+  note   = {arXiv:1709.00084}
+}
+
+% Downloaded 2026-09-06: the Coulomb friction / friction-cone / friction-
+% pyramid approximation described in Section 2.3.2 had no citation - this
+% is ODE's own official user guide (the physics engine Gazebo Classic
+% actually uses), which defines exactly this friction-cone/pyramid
+% approximation in its own Section 3 ("Friction Approximation").
+@manual{oderelease,
+  organization = {ODE Project},
+  author       = {Smith, Russell},
+  title        = {Open Dynamics Engine User Guide},
+  year         = {2006},
+  note         = {\url{https://ode.org/ode-latest-userguide.pdf}}
+}
+
+% Added to cite the classical PID control law (Equation~\ref{eq:pid} in
+% Chapter 2's drive-plugin PID loop section, also invoked in Chapter 3's
+% "not moving forward" bug analysis), which previously had no citation
+% anywhere in this document. Freely available, author-hosted textbook.
+@book{astrom2008feedback,
+  author    = {{\AA}str{\"o}m, Karl Johan and Murray, Richard M.},
+  title     = {Feedback Systems: An Introduction for Scientists and Engineers},
+  publisher = {Princeton University Press},
+  year      = {2008},
+  note      = {\url{https://www.cds.caltech.edu/~murray/amwiki/index.php/Second_Edition}}
+}
+
+% Added to cite the TCP-vs-UDP delivery-guarantee comparison in Chapter 4's
+% bridge-protocol design-choice paragraph, which previously asserted TCP's
+% reliable, in-order delivery behaviour with no citation. This is the
+% actual protocol specification, not a secondary textbook.
+@misc{rfc793tcp,
+  author       = {Postel, Jon},
+  title        = {Transmission Control Protocol},
+  howpublished = {RFC 793},
+  year         = {1981},
+  note         = {\url{https://www.rfc-editor.org/rfc/rfc793}}
+}
+
+% Companion to rfc793tcp above, cited alongside it for the same paragraph's
+% claim about UDP's low-latency, no-delivery-guarantee behaviour.
+@misc{rfc768udp,
+  author       = {Postel, Jon},
+  title        = {User Datagram Protocol},
+  howpublished = {RFC 768},
+  year         = {1980},
+  note         = {\url{https://www.rfc-editor.org/rfc/rfc768}}
+}
+
+% Added to cite the symmetric-delay round-trip assumption Chapter 4's
+% clock-offset measurement explicitly borrows from NTP, which previously
+% named NTP with no citation. This is NTPv4's own specification.
+@misc{rfc5905ntp,
+  author       = {Mills, David and Martin, Jim and Burbank, Jack and Kasch, William},
+  title        = {Network Time Protocol Version 4: Protocol and Algorithms Specification},
+  howpublished = {RFC 5905},
+  year         = {2010},
+  note         = {\url{https://www.rfc-editor.org/rfc/rfc5905}}
+}

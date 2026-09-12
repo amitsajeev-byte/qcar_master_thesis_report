@@ -10,6 +10,32 @@ sim-to-real gap identified and, where practical, corrected. Results
 are presented here without re-opening their diagnosis; interpretation
 and generalisation are deferred to Chapter~\ref{ch:summary}.
 
+Table~\ref{tab:results-at-a-glance} gives the headline figure for
+each result before the corresponding section restates it in full
+detail. Every row here is a forward reference, not a new claim.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Results at a glance.}
+  \label{tab:results-at-a-glance}
+  \begin{tabular}{@{}p{4.1cm}p{5.3cm}p{3.9cm}@{}}
+    \toprule
+    Metric & Before $\to$ after & Section \\
+    \midrule
+    Throttle speed accuracy & 2.6--2.7$\times$ error $\to$ within 5\% & \ref{sec:results-throttle} \\
+    Steering angle accuracy & $\approx$39\% error $\to$ $\approx$5.6\% & \ref{sec:results-steering} \\
+    Stop latency (mean) & \SI{2.42}{\second} $\to$ \SI{0.55}{\second} & \ref{sec:results-stop-distance} \\
+    Stop extra distance (mean) & \SI{0.69}{\meter} $\to$ \SI{0.12}{\meter} & \ref{sec:results-stop-distance} \\
+    K-turn duration, sim (mean) & \SI{110.2}{\second}/2.0 rec.\ $\to$ \SI{43.9}{\second}/0.0 rec. & \ref{sec:results-cusp} \\
+    K-turn goals, real hardware & 2/2 succeeded, 0 recoveries & \ref{sec:results-cusp} \\
+    Goal 2, repeated 4$\times$, real hardware & 4/4 succeeded, position error \SIrange{0.129}{0.222}{\meter} (real variability) & \ref{sec:results-goal-reaching} \\
+    Goal 3 (near-\ang{180} reversal), real hardware & succeeded, position error \SI{0.239}{\meter}, yaw error \ang{6.0} & \ref{sec:goal3-reversal} \\
+    General goal-reaching, real hardware & no pre-planned, varied success-rate campaign run & \ref{sec:results-goal-reaching}, \ref{sec:results-limitations} \\
+    Map quality / localisation accuracy & 4--7\% map-scale underestimate; AMCL forward-distance gap 6.7--10.6\% (growing), yaw accurate & \ref{sec:results-map-localization} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
 \section{Actuator Calibration Accuracy}
 \label{sec:results-throttle}
 
@@ -38,16 +64,20 @@ $\approx$2.6--2.7$\times$ to within 5\% across the
 $\approx$\SI{0.25}{\meter\per\second}, both the calibrated and
 uncalibrated mappings are unreliable in an open-loop sense, since the
 vehicle's static-friction deadband (Section~\ref{sec:deadband-discovery})
-sits in that range independently of gain calibration; commanding
+sits in that range independently of gain calibration. Commanding
 \SI{0.2}{\meter\per\second} moved the vehicle in only some trials.
 
 \section{Stop-Distance and Latency}
 \label{sec:results-stop-distance}
 
-Table~\ref{tab:results-stop-distance} restates the
+Table~\ref{tab:results-stop-distance} sets out the
 \texttt{readMode=0} fix's effect (Section~\ref{sec:readmode-validation})
 across all five tested conditions, alongside the residual physical
-explanation for what remains.
+explanation for what remains. As noted in
+Section~\ref{sec:readmode-validation}, these encoder-derived extra-distance
+and stop-latency figures were independently cross-checked at each
+tested distance against tape-measured floor markings and manual
+stopwatch timing. The two agreed.
 
 \begin{table}[htbp]
   \centering
@@ -55,7 +85,7 @@ explanation for what remains.
   \label{tab:results-stop-distance}
   \begin{tabular}{@{}lccc@{}}
     \toprule
-    Test condition & Stiction delay & Extra distance & Stop latency \\
+    Test condition & Start-up delay & Extra distance & Stop latency \\
     & (before $\to$ after) & (before $\to$ after) & (before $\to$ after) \\
     \midrule
     \SI{2}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.09}{0.117}{\second} & \SIrange{0.520}{0.114}{\meter} & \SIrange{2.37}{0.598}{\second} \\
@@ -67,13 +97,45 @@ explanation for what remains.
   \end{tabular}
 \end{table}
 
-Mean stiction delay across the five post-fix conditions is
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        ybar, bar width=9pt,
+        width=0.92\textwidth, height=6cm,
+        ylabel={Stop latency (s)},
+        symbolic x coords={2m@0.3, 2m@0.4, 2m@0.5, 1m@0.3, 3m@0.3},
+        xtick=data, tick label style={font=\small}, label style={font=\small},
+        ymin=0, ymax=2.9,
+        legend style={font=\small, at={(0.5,1.12)}, anchor=south, legend columns=2},
+        enlarge x limits=0.15,
+        nodes near coords, nodes near coords style={font=\tiny},
+        grid=major, grid style={gray!20}
+      ]
+      \addplot[fill=gray!70] coordinates {(2m@0.3,2.37) (2m@0.4,2.40) (2m@0.5,2.55) (1m@0.3,2.44) (3m@0.3,2.35)};
+      \addlegendentry{Before (\texttt{readMode=1})}
+      \addplot[fill=black] coordinates {(2m@0.3,0.598) (2m@0.4,0.501) (2m@0.5,0.550) (1m@0.3,0.572) (3m@0.3,0.509)};
+      \addlegendentry{After (\texttt{readMode=0})}
+    \end{axis}
+  \end{tikzpicture}
+  \caption[Stop latency before/after the \texttt{readMode=0} fix]{Stop latency before and after the \texttt{readMode=0} HAL
+    buffering fix (Table~\ref{tab:results-stop-distance}), across all
+    five tested distance/speed combinations. The near-constant
+    $\approx$\SI{2.0}{\second}--\SI{2.1}{\second} pre-fix latency,
+    largely independent of the commanded distance or speed, is itself
+    evidence for the fixed-buffer-depth mechanism of
+    Figure~\ref{fig:ringbuffer-lag} rather than a physical drivetrain
+    effect, which would be expected to scale with speed.}
+  \label{fig:stop-latency-chart}
+\end{figure}
+
+Mean start-up delay across the five post-fix conditions is
 $\approx$\SI{0.09}{\second} (down from $\approx$\SI{2.12}{\second}),
 mean extra distance is $\approx$\SI{0.12}{\meter} (down from
-$\approx$\SI{0.69}{\meter}), and mean stop latency is
+$\approx$\SI{0.69}{\meter}) and mean stop latency is
 $\approx$\SI{0.55}{\second} (down from $\approx$\SI{2.42}{\second}).
 The post-fix residual is not further reducible with the current
-open-loop throttle model: dividing extra distance by stop latency
+open-loop throttle model. Dividing extra distance by stop latency
 recovers \SIrange{54}{61}{\percent} of cruise velocity in four of the
 five conditions, consistent with an ordinary, roughly linear velocity
 decay to zero over the measured latency window (a perfectly linear
@@ -83,19 +145,18 @@ unexplained delay mechanism.
 \section{Sim-versus-Real Overshoot}
 \label{sec:results-sim-vs-real}
 
-Table~\ref{tab:results-sim-vs-real} restates the sim-versus-real
+Table~\ref{tab:results-sim-vs-real} presents the sim-versus-real
 comparison of Section~\ref{sec:sim-vs-real}. Because this comparison
 was run \emph{before} both the throttle calibration
 (Section~\ref{sec:throttle-calibration}) and the buffering-defect fix
 (Section~\ref{sec:readmode-bug}), it is reported here as the gap that
 existed at that stage of the project, not as the final residual gap
-between simulation and hardware -- Sections~\ref{sec:results-throttle}
-and~\ref{sec:results-stop-distance} above are the corresponding
+between simulation and hardware. Sections~\ref{sec:results-throttle}
+and~\ref{sec:results-stop-distance} above give the corresponding
 final, post-fix figures, but a matched six-point sim-versus-real
-sweep was not re-run after both fixes were in place.
-% TODO: if lab time allows, re-running the exact six-point sweep from
-% Sec. 5.4 post-fix would let this results chapter report a genuine
-% final sim-to-real gap number rather than only a pre-fix one.
+sweep was not re-run after both fixes were in place. This
+project's hardware access concluded before such a re-run could be
+scheduled (Section~\ref{sec:results-limitations}).
 
 \begin{table}[htbp]
   \centering
@@ -136,15 +197,15 @@ Section~\ref{sec:results-throttle}'s companion actuator.
 
 As with the throttle mapping, this is a per-unit, empirically fitted
 correction rather than a property derivable from the vehicle's nominal
-kinematic model alone -- a second, independent confirmation of this
-thesis's broader finding that the QCar's actual actuator response
+kinematic model alone. This is a second, independent confirmation of
+this thesis's broader finding that the QCar's actual actuator response
 cannot be assumed to match its documented/kinematic specification
 without direct measurement.
 
 \section{Navigation Robustness in Tight Spaces}
 \label{sec:results-cusp}
 
-Table~\ref{tab:results-cusp-summary} restates
+Table~\ref{tab:results-cusp-summary} gives
 Section~\ref{sec:cusp-freeze}'s K-turn/reversal-cusp results: the
 representative corridor reproduction goal's manoeuvre duration and
 recovery count, across the untouched baseline and the final,
@@ -165,86 +226,669 @@ corner-extending \texttt{CuspStraightenerSmoother} configuration.
   \end{tabular}
 \end{table}
 
-This is corroborated, not merely repeated, by real-hardware testing:
-two independently sent goals on the physical vehicle, each requiring a
-genuine reversal manoeuvre, both succeeded with zero recoveries
-(Section~\ref{sec:cusp-hw-validation}) -- a stronger form of validation
-than the simulation trial count alone, since it confirms the fix
-transfers to real sensor noise, real actuator response, and real
-planner behaviour on unseen goal geometry, not only the specific
-corridor reproduction it was developed against. The one qualification
-recorded against this result is that individual replans on real
-hardware occasionally showed substantially higher cusp counts
-(up to 8--10) than any simulation trial produced (maximum
-$\approx$3) -- both hardware goals still succeeded despite this, so it
-is reported as an open, unexplained gap between simulated and real
-replanning behaviour rather than a limitation of the fix itself.
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        ybar, bar width=22pt,
+        width=0.85\textwidth, height=6.5cm,
+        ylabel={Mean manoeuvre duration (s)},
+        symbolic x coords={Baseline, Smoother (buggy), Smoother (fixed), Final (+extension)},
+        xtick=data, x tick label style={font=\scriptsize, align=center, text width=2.1cm},
+        label style={font=\small}, tick label style={font=\small},
+        ymin=0, ymax=250,
+        nodes near coords={\pgfmathprintnumber[fixed,precision=1]{\pgfplotspointmeta}s},
+        every node near coord/.append style={font=\scriptsize, yshift=1mm},
+        enlarge x limits=0.18,
+        grid=major, grid style={gray!20}
+      ]
+      \addplot[fill=gray!70] coordinates {
+        (Baseline,110.2) (Smoother (buggy),210.3)
+        (Smoother (fixed),86.7) (Final (+extension),43.9)};
+    \end{axis}
+  \end{tikzpicture}
+  \caption[Mean K-turn manoeuvre duration by configuration]{Mean K-turn manoeuvre duration across every configuration
+    tested (Table~\ref{tab:cusp-trials}), including the intermediate,
+    worse-than-baseline result caused by the mutation-order bug of
+    Section~\ref{sec:cusp-smoother-v2} -- shown because it happened,
+    not omitted for a cleaner-looking trend. Mean recoveries per trial
+    for the same four configurations, left to right: 2.0, 5.3, 1.3,
+    0.0.}
+  \label{fig:cusp-duration-chart}
+\end{figure}
+
+This is corroborated, not merely repeated, by real-hardware testing.
+Two independently sent goals on the physical vehicle, each requiring
+a genuine reversal manoeuvre, both succeeded with zero recoveries
+(Section~\ref{sec:cusp-hw-validation}). This is a stronger form of
+validation than the simulation trial count alone, since it confirms
+the fix transfers to real sensor noise, real actuator response and
+real planner behaviour on unseen goal geometry, not only the specific
+corridor reproduction it was developed against.
+
+The one qualification recorded against this result is that
+individual replans on real hardware occasionally showed substantially
+higher cusp counts (up to 8--10) than any simulation trial produced
+(maximum $\approx$3). Both hardware goals still succeeded despite
+this, so it is reported as an open, unexplained gap between simulated
+and real replanning behaviour, rather than a limitation of the fix
+itself.
 
 \section{Navigation Goal-Reaching}
 \label{sec:results-goal-reaching}
 
 Closed-loop \texttt{navigate\_to\_pose} goals requiring both straight
 driving and real turning were completed successfully on the physical
-QCar on multiple occasions across this project, confirmed both by
-\texttt{bt\_navigator}'s own \texttt{Goal succeeded} status and, in
-the final validation of Section~\ref{sec:final-validation}, by the
-operator's direct observation that localisation tracked the vehicle's
-real motion closely throughout the goal, rather than exhibiting the
-map-shift artefact of Section~\ref{sec:display-lag}. The one
+QCar on multiple occasions across this project. This was confirmed
+both by \texttt{bt\_navigator}'s own \texttt{Goal succeeded} status
+and, in the final validation of Section~\ref{sec:final-validation}, by
+my own direct observation that localisation tracked the
+vehicle's real motion closely throughout the goal, rather than
+exhibiting the map-shift artefact of Section~\ref{sec:display-lag}. The one
 navigation timing measurement available (Table~\ref{tab:display-lag})
 was taken under the pre-\texttt{readMode=0} bridge configuration and
 should be read as an upper bound on the true post-fix pipeline
 latency and stop-coast behaviour during a live goal, not as the final
 figure, per the caveat in Section~\ref{sec:display-lag-interpretation}.
 
+The one goal class with a genuine, repeated hardware success count is
+the reversal/K-turn manoeuvre of Section~\ref{sec:results-cusp}: 2 of
+2 sent goals succeeded with zero recoveries. General straight-line and
+gentle-turn goal-reaching, by contrast, is supported only by my own
+qualitative assessments above and by individual successful
+\texttt{Goal succeeded} events logged during development, not by a
+planned, repeated multi-goal trial campaign with a computed success
+rate. This is stated plainly here, rather than implied to be
+equivalent to the K-turn result and is carried forward as the first
+item in Section~\ref{sec:results-limitations}.
+
+Two further general (non-K-turn) goals were run on physical hardware
+on 2026-09-07. Each was logged in full: given goal, AMCL-estimated
+final pose, the planner's path statistics and commanded-vs-actual
+velocity over the whole run, not just a qualitative pass/fail
+observation.
+
+\subsection{Goal 1, a Straight-Line Approach}
+\label{sec:goal1-straight}
+
+The first trial commanded a straight approach: a goal pose of
+$(1.978, 0.003, \ang{0})$ in the map frame, \SI{1.871}{\meter} away in
+a straight line from the vehicle's pose at goal-send time.
+Physically, this was an approximately \SI{2}{\meter} run set up on
+the lab floor. \texttt{SmacPlannerHybrid} planned a 29-waypoint, zero-cusp (no
+reversal) path of \SI{1.874}{\meter}, essentially the straight line
+itself (curvature ratio 1.00$\times$), smoothed by the
+cusp-straightener smoother. The goal was accepted at epoch
+1788779882.264. \texttt{Goal succeeded} was reported
+\SI{8.47}{\second} later with zero recovery behaviours triggered.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        width=\textwidth, height=6cm,
+        xlabel={Time since goal accepted (s)}, ylabel={Speed (m/s)},
+        xmin=0, xmax=9.1, ymin=0, ymax=0.34,
+        grid=major, grid style={gray!15},
+        legend pos=south west, legend style={font=\footnotesize, draw=gray!50},
+        axis lines=left,
+      ]
+      \addplot[thick, dashed, blue!70!black] coordinates {
+        (0.128,0.0702) (0.227,0.2202) (0.327,0.3000) (0.427,0.3000) (0.527,0.2994) (0.627,0.2998) (0.728,0.3000) (0.827,0.3000) (0.927,0.3000) (1.028,0.3000) (1.127,0.3000) (1.228,0.3000) (1.328,0.3000) (1.427,0.3000) (1.527,0.3000) (1.627,0.3000) (1.727,0.3000) (1.827,0.3000) (1.927,0.3000) (2.027,0.3000) (2.127,0.3000) (2.228,0.3000) (2.327,0.3000) (2.430,0.3000) (2.529,0.3000) (2.630,0.3000) (2.727,0.3000) (2.827,0.3000) (2.929,0.3000) (3.027,0.3000) (3.127,0.3000) (3.227,0.3000) (3.328,0.3000) (3.427,0.3000) (3.527,0.3000) (3.628,0.3000) (3.727,0.3000) (3.827,0.3000) (3.927,0.3000) (4.028,0.3000) (4.127,0.3000) (4.227,0.3000) (4.327,0.3000) (4.427,0.3000) (4.527,0.3000) (4.628,0.3000) (4.728,0.3000) (4.828,0.3000) (4.927,0.3000) (5.027,0.3000) (5.129,0.3000) (5.227,0.3000) (5.327,0.3000) (5.427,0.2965) (5.527,0.2995) (5.627,0.2938) (5.729,0.2993) (5.827,0.2993) (5.927,0.3000) (6.028,0.3000) (6.129,0.2904) (6.231,0.2755) (6.328,0.2948) (6.429,0.2665) (6.527,0.2566) (6.627,0.2310) (6.727,0.2453) (6.827,0.2602) (6.928,0.2406) (7.027,0.2205) (7.128,0.1898) (7.227,0.2007) (7.328,0.2209) (7.427,0.2102) (7.527,0.1924) (7.627,0.1833) (7.728,0.2156) (7.827,0.2280) (7.928,0.2074) (8.028,0.1977) (8.130,0.1717) (8.228,0.1549) (8.327,0.1777) (8.427,0.1843) (8.530,0.0343) (8.629,0.0000) (8.727,0.0000) (8.827,0.0000) (8.927,0.0000) (9.027,0.0000)
+      };
+      \addlegendentry{Commanded (\texttt{/cmd\_vel})}
+      \addplot[thick, orange!90!black] coordinates {
+        (0.001,0.0000) (0.065,0.0000) (0.133,0.0000) (0.209,0.0603) (0.279,0.0013) (0.374,0.0452) (0.433,0.0489) (0.510,0.0628) (0.577,0.0700) (0.685,0.1039) (0.732,0.1063) (0.825,0.1359) (0.884,0.1296) (0.953,0.1555) (1.033,0.1926) (1.131,0.1873) (1.181,0.1939) (1.255,0.2120) (1.333,0.2254) (1.426,0.2308) (1.487,0.2481) (1.555,0.2396) (1.629,0.2518) (1.704,0.2532) (1.775,0.2676) (1.878,0.2670) (1.932,0.2699) (2.007,0.2737) (2.075,0.2854) (2.174,0.2921) (2.232,0.2938) (2.308,0.3008) (2.376,0.3026) (2.485,0.2876) (2.531,0.2901) (2.629,0.2868) (2.684,0.2835) (2.774,0.2864) (2.831,0.2918) (2.908,0.3008) (2.982,0.3104) (3.078,0.3005) (3.127,0.2998) (3.231,0.2978) (3.283,0.3036) (3.354,0.2967) (3.427,0.2942) (3.530,0.2906) (3.577,0.2891) (3.681,0.2877) (3.731,0.2819) (3.805,0.2854) (3.881,0.2899) (3.973,0.2756) (4.030,0.2753) (4.113,0.2811) (4.178,0.2684) (4.275,0.2686) (4.330,0.2756) (4.406,0.2676) (4.484,0.2630) (4.561,0.2704) (4.630,0.2592) (4.703,0.2594) (4.782,0.2763) (4.874,0.2535) (4.934,0.2603) (5.029,0.2607) (5.085,0.2559) (5.157,0.2675) (5.230,0.2540) (5.309,0.2511) (5.378,0.2589) (5.477,0.2535) (5.532,0.2495) (5.608,0.2584) (5.676,0.2480) (5.778,0.2443) (5.833,0.2478) (5.908,0.2530) (5.978,0.2590) (6.074,0.2633) (6.132,0.2492) (6.211,0.2537) (6.281,0.2585) (6.360,0.2456) (6.436,0.2434) (6.530,0.2432) (6.579,0.2244) (6.672,0.2342) (6.730,0.2101) (6.807,0.2110) (6.878,0.2126) (6.975,0.2133) (7.030,0.1945) (7.107,0.2008) (7.176,0.1881) (7.273,0.1899) (7.332,0.1930) (7.409,0.1758) (7.479,0.1764) (7.574,0.1722) (7.630,0.1494) (7.708,0.1489) (7.781,0.1515) (7.871,0.1478) (7.931,0.1433) (8.008,0.1424) (8.076,0.1273) (8.179,0.1278) (8.230,0.1428) (8.309,0.1215) (8.375,0.1190) (8.476,0.1320) (8.534,0.1057) (8.629,0.1079) (8.678,0.0336) (8.777,0.0000) (8.830,0.0000) (8.909,0.0000) (8.977,0.0000) (9.032,0.0000)
+      };
+      \addlegendentry{Actual (\texttt{/odom} encoder)}
+      \draw[densely dashed, gray] (axis cs:0,0.30) -- (axis cs:9.1,0.30);
+      \node[gray, font=\tiny, anchor=south east] at (axis cs:9.05,0.315) {speed cap 0.30 m/s};
+    \end{axis}
+  \end{tikzpicture}
+  \caption[Goal 1: commanded vs.\ actual speed]{Goal 1 (straight approach): commanded MPPI output vs. actual encoder-derived speed. Data logged directly from \texttt{/cmd\_vel} and \texttt{/odom} on the dev PC during the run (50\,Hz odometry, $\sim$40\,Hz \texttt{cmd\_vel}); commanded velocity is MPPI's output prior to the QCar bridge's onboard throttle rate-limiter, actual velocity is wheel-encoder-derived dead reckoning, not ground truth.}
+  \label{fig:goal1-velocity}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Goal 1: given goal vs. final AMCL-estimated pose (map frame).}
+  \label{tab:goal1-pose}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+     & $x$ (m) & $y$ (m) & yaw \\
+    \midrule
+    Given goal & 1.978 & 0.003 & \ang{0} \\
+    Final pose & 1.765 & -0.013 & not captured \\
+    Error & -0.213 & -0.016 & -- \\
+    \bottomrule
+  \end{tabular}
+  \\[4pt]
+  \parbox{0.9\textwidth}{\small Position error magnitude: \SI{0.214}{\meter} (mostly an $x$-axis undershoot) -- outside the configured \SI{0.12}{\meter} \texttt{xy\_goal\_tolerance}. The final orientation quaternion was not captured for this run.}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/goal1-hardware-photo.jpg}
+  \caption[The QCar at rest at the end of the Goal~1 trial]{The physical QCar at rest at the end of the Goal~1 trial.
+    The yellow tape corners mark the given-goal position, physically
+    measured and placed before the run; the vehicle's final resting
+    position sits visibly short of centre, consistent with the
+    \SI{0.214}{\meter} position error in Table~\ref{tab:goal1-pose}.}
+  \label{fig:goal1-hardware-photo}
+\end{figure}
+
+\subsection{Goal 2, a Curved Approach}
+\label{sec:goal2-curved}
+
+The second trial, run on the same map used throughout hardware
+testing, commanded a goal requiring a genuine turn: $(1.891, -1.775, \ang{-90})$
+in the map frame, \SI{2.286}{\meter} away in a straight line, but
+planned as a \SI{3.185}{\meter}, 39-waypoint path (curvature ratio
+1.39$\times$) with zero cusps. The goal was accepted at epoch
+1788784376.840. \texttt{Goal succeeded} was reported
+\SI{21.87}{\second} later, again with zero recoveries.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        width=\textwidth, height=6cm,
+        xlabel={Time since goal accepted (s)}, ylabel={Speed (m/s)},
+        xmin=0, xmax=23.2, ymin=0, ymax=0.34,
+        grid=major, grid style={gray!15},
+        legend pos=south west, legend style={font=\footnotesize, draw=gray!50},
+        axis lines=left,
+      ]
+      \addplot[thick, dashed, blue!70!black] coordinates {
+        (0.036,0.0750) (0.186,0.3000) (0.336,0.3000) (0.486,0.2996) (0.636,0.3000) (0.786,0.3000) (0.936,0.2999) (1.087,0.3000) (1.236,0.3000) (1.386,0.3000) (1.536,0.3000) (1.686,0.3000) (1.836,0.3000) (1.986,0.3000) (2.136,0.3000) (2.287,0.3000) (2.436,0.3000) (2.589,0.2999) (2.737,0.3000) (2.886,0.3000) (3.036,0.3000) (3.186,0.3000) (3.336,0.3000) (3.486,0.3000) (3.636,0.3000) (3.786,0.3000) (3.936,0.3000) (4.086,0.3000) (4.236,0.3000) (4.386,0.3000) (4.536,0.3000) (4.686,0.3000) (4.836,0.3000) (4.986,0.3000) (5.136,0.3000) (5.287,0.3000) (5.436,0.3000) (5.586,0.3000) (5.736,0.3000) (5.886,0.3000) (6.039,0.3000) (6.186,0.3000) (6.336,0.3000) (6.486,0.3000) (6.636,0.3000) (6.786,0.3000) (6.936,0.3000) (7.087,0.3000) (7.236,0.3000) (7.386,0.3000) (7.536,0.3000) (7.686,0.3000) (7.836,0.3000) (7.986,0.3000) (8.136,0.3000) (8.286,0.3000) (8.436,0.3000) (8.586,0.3000) (8.736,0.3000) (8.886,0.3000) (9.037,0.3000) (9.186,0.3000) (9.337,0.3000) (9.486,0.3000) (9.636,0.3000) (9.786,0.3000) (9.936,0.3000) (10.086,0.3000) (10.236,0.3000) (10.386,0.3000) (10.536,0.3000) (10.686,0.3000) (10.839,0.3000) (10.986,0.3000) (11.136,0.3000) (11.286,0.3000) (11.436,0.3000) (11.586,0.3000) (11.736,0.3000) (11.886,0.3000) (12.036,0.3000) (12.186,0.3000) (12.336,0.3000) (12.486,0.3000) (12.636,0.3000) (12.786,0.3000) (12.936,0.3000) (13.086,0.3000) (13.237,0.3000) (13.386,0.3000) (13.536,0.3000) (13.686,0.3000) (13.836,0.3000) (13.986,0.3000) (14.136,0.3000) (14.286,0.3000) (14.436,0.3000) (14.587,0.3000) (14.736,0.3000) (14.886,0.3000) (15.036,0.3000) (15.186,0.3000) (15.336,0.3000) (15.486,0.3000) (15.636,0.3000) (15.786,0.3000) (15.936,0.3000) (16.086,0.3000) (16.237,0.3000) (16.386,0.3000) (16.536,0.2986) (16.686,0.2982) (16.836,0.2987) (16.986,0.3000) (17.136,0.2996) (17.286,0.3000) (17.438,0.2989) (17.586,0.3000) (17.736,0.2731) (17.886,0.2659) (18.036,0.2820) (18.186,0.2762) (18.337,0.2498) (18.486,0.2344) (18.636,0.2338) (18.786,0.2160) (18.936,0.2216) (19.087,0.2308) (19.236,0.2386) (19.387,0.2268) (19.539,0.2621) (19.686,0.2754) (19.836,0.2549) (19.986,0.2104) (20.136,0.1522) (20.287,0.1477) (20.436,0.1454) (20.586,0.1643) (20.737,0.1651) (20.886,0.2210) (21.036,0.2826) (21.187,0.2894) (21.336,0.2897) (21.486,0.2849) (21.640,0.2601) (21.786,0.2237) (21.937,0.0688) (22.086,0.0000) (22.237,0.0000) (22.386,0.0000) (22.537,0.0000) (22.686,0.0000) (22.836,0.0000)
+      };
+      \addlegendentry{Commanded (\texttt{/cmd\_vel})}
+      \addplot[thick, orange!90!black] coordinates {
+        (0.032,0.0000) (0.183,0.0497) (0.289,0.0346) (0.410,0.0466) (0.538,0.0985) (0.687,0.1238) (0.788,0.1300) (0.919,0.1503) (1.046,0.1632) (1.166,0.1654) (1.295,0.1960) (1.437,0.2042) (1.537,0.2203) (1.662,0.2080) (1.789,0.2204) (1.935,0.2325) (2.040,0.2441) (2.185,0.2464) (2.287,0.2504) (2.415,0.2513) (2.535,0.2591) (2.667,0.2598) (2.787,0.2559) (2.914,0.2475) (3.039,0.2580) (3.184,0.2755) (3.294,0.2731) (3.438,0.2603) (3.539,0.2596) (3.661,0.2521) (3.789,0.2498) (3.940,0.2478) (4.045,0.2383) (4.166,0.2409) (4.288,0.2424) (4.435,0.2416) (4.538,0.2247) (4.686,0.2199) (4.791,0.2152) (4.917,0.2170) (5.041,0.2200) (5.186,0.1994) (5.285,0.2021) (5.416,0.2197) (5.540,0.2093) (5.671,0.2131) (5.787,0.2274) (5.915,0.2032) (6.042,0.2071) (6.166,0.1904) (6.290,0.1794) (6.435,0.1655) (6.543,0.1699) (6.666,0.1480) (6.790,0.1419) (6.933,0.1313) (7.036,0.1454) (7.166,0.1489) (7.289,0.1456) (7.435,0.1290) (7.539,0.1224) (7.692,0.1047) (7.788,0.1154) (7.933,0.1186) (8.038,0.1275) (8.169,0.1295) (8.285,0.1079) (8.415,0.0825) (8.538,0.0816) (8.688,0.0880) (8.790,0.1088) (8.935,0.1134) (9.041,0.1307) (9.184,0.1106) (9.291,0.1048) (9.436,0.0760) (9.539,0.0699) (9.662,0.0771) (9.786,0.0934) (9.917,0.0952) (10.039,0.1029) (10.186,0.1173) (10.293,0.0996) (10.416,0.0755) (10.538,0.0790) (10.665,0.0773) (10.787,0.0952) (10.932,0.0993) (11.040,0.1107) (11.169,0.1152) (11.287,0.1164) (11.442,0.0969) (11.535,0.1099) (11.667,0.1126) (11.789,0.1019) (11.941,0.1077) (12.036,0.0912) (12.166,0.0816) (12.288,0.0662) (12.439,0.0730) (12.539,0.0603) (12.661,0.0688) (12.788,0.0727) (12.933,0.1002) (13.035,0.0955) (13.164,0.0976) (13.289,0.0977) (13.443,0.0942) (13.538,0.1116) (13.694,0.1170) (13.789,0.1020) (13.912,0.1294) (14.039,0.1453) (14.188,0.1424) (14.290,0.1326) (14.430,0.1276) (14.534,0.1452) (14.667,0.1442) (14.788,0.1409) (14.930,0.1362) (15.034,0.1261) (15.169,0.1352) (15.295,0.1491) (15.437,0.1440) (15.538,0.1534) (15.688,0.1583) (15.786,0.1673) (15.916,0.1676) (16.042,0.1613) (16.185,0.1668) (16.338,0.1786) (16.415,0.1808) (16.541,0.1704) (16.666,0.1723) (16.796,0.1912) (16.919,0.1772) (17.034,0.1711) (17.168,0.1760) (17.290,0.1802) (17.412,0.1830) (17.535,0.1814) (17.666,0.1562) (17.788,0.1669) (17.936,0.1827) (18.041,0.1753) (18.165,0.1574) (18.289,0.1468) (18.435,0.1614) (18.537,0.1329) (18.666,0.1334) (18.790,0.1161) (18.912,0.1168) (19.038,0.1043) (19.184,0.1119) (19.289,0.1249) (19.432,0.1066) (19.539,0.0989) (19.684,0.1087) (19.787,0.1072) (19.919,0.1089) (20.038,0.1118) (20.188,0.1045) (20.285,0.0972) (20.414,0.0912) (20.533,0.0965) (20.667,0.0948) (20.789,0.0728) (20.935,0.0924) (21.033,0.0811) (21.171,0.0992) (21.288,0.1107) (21.432,0.0974) (21.539,0.0784) (21.671,0.0943) (21.788,0.1102) (21.935,0.0772) (22.036,0.0615) (22.170,-0.0002) (22.289,0.0000) (22.436,0.0000) (22.539,0.0000) (22.671,0.0000) (22.789,0.0000) (22.913,0.0000) (23.027,0.0000) (23.142,0.0000)
+      };
+      \addlegendentry{Actual (\texttt{/odom} encoder)}
+      \draw[densely dashed, gray] (axis cs:0,0.30) -- (axis cs:23.2,0.30);
+      \node[gray, font=\tiny, anchor=south east] at (axis cs:23.1,0.315) {speed cap 0.30 m/s};
+    \end{axis}
+  \end{tikzpicture}
+  \caption[Goal 2: commanded vs.\ actual speed]{Goal 2 (curved approach): commanded MPPI output vs. actual encoder-derived speed. Same logging setup as Figure~\ref{fig:goal1-velocity}. The extended, gradual deceleration around $t\approx$\SIrange{18}{21}{\second} reflects the curved final approach into the goal's \ang{-90} orientation requirement, not a stall or recovery event.}
+  \label{fig:goal2-velocity}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Goal 2: given goal vs. final AMCL-estimated pose (map frame).}
+  \label{tab:goal2-pose}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+     & $x$ (m) & $y$ (m) & yaw \\
+    \midrule
+    Given goal & 1.891 & -1.775 & \ang{-90} \\
+    Final pose & 1.905 & -1.646 & \ang{-81.4} \\
+    Error & +0.014 & +0.128 & +\ang{8.6} \\
+    \bottomrule
+  \end{tabular}
+  \\[4pt]
+  \parbox{0.9\textwidth}{\small Position error magnitude: \SI{0.129}{\meter} -- just past the configured \SI{0.12}{\meter} \texttt{xy\_goal\_tolerance}. Yaw error \ang{8.6} is comfortably within the \ang{17.2} (\SI{0.3}{\radian}) \texttt{yaw\_goal\_tolerance}.}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/goal2-hardware-photo.jpg}
+  \caption[The QCar at rest at the end of the Goal~2 trial]{The physical QCar at rest at the end of the Goal~2 trial,
+    rotated into its final \ang{-90} heading. The yellow tape corners
+    again mark the given-goal position; the vehicle's final pose is
+    close to, but visibly offset from, the marked box, consistent with
+    the \SI{0.129}{\meter} position error and \ang{8.6} yaw error in
+    Table~\ref{tab:goal2-pose}.}
+  \label{fig:goal2-hardware-photo}
+\end{figure}
+
+\paragraph{Repeated 3$\times$ on 2026-09-10: real run-to-run variability.}
+To check whether Goal~2's single result above was representative, the
+identical given goal ($(1.891, -1.775, \ang{-90})$, pulled directly
+from that run's own recorded data) was sent three further times on
+real hardware from the same start position and map, in what turned
+out to be this project's final hardware session. All three repeats
+also reported \texttt{Goal succeeded}, but with genuine run-to-run
+variability. Duration ranged \SIrange{17.8}{60.4}{\second}, some
+repeats' planned paths included a reverse-entering cusp that the
+original run never needed and position error ranged
+\SIrange{0.146}{0.222}{\meter}. No repeat matched the original's
+particular combination of fast, clean and accurate. This is a direct,
+if small-sample, hardware demonstration of the same real run-to-run
+planning and execution variability this project's calibration work
+(Chapters~\ref{ch:hardware-bridge}--\ref{ch:calibration}) already
+characterises at the actuator level, here visible at the level of
+whole-path planning and outcome.
+
+\paragraph{Why Goal~1 and Goal~2 exceed their position tolerance.}
+Both Goal~1 and Goal~2 above were reported as \texttt{Goal succeeded}
+despite their final AMCL-estimated pose sitting outside the configured
+\SI{0.12}{\meter} \texttt{xy\_goal\_tolerance} (\SI{0.214}{\meter} and
+\SI{0.129}{\meter} respectively). This is not a new or unexplained
+failure mode. It is a hardware confirmation of a tension this
+project's own MPPI tuning had already identified between
+\texttt{GoalCritic} (pulling the vehicle to converge exactly on the
+goal point) and \texttt{PathAlignCritic} (favouring a smooth final
+approach along the planned path), weighted in this project's
+configuration to favour the latter.
+Goal~2's yaw error (\ang{8.6}) remained comfortably inside its own
+tolerance, so the discrepancy is specific to final position, not
+orientation.
+
+\subsection{Goal 3, a Near-\ang{180} Reversal Goal}
+\label{sec:goal3-reversal}
+
+This trial commanded a harder course than Goals~1 and~2:
+\SI{3.0}{\meter} straight ahead of the start position, but with the
+final orientation reversed \ang{180} from the starting heading.
+Because an Ackermann-steered vehicle cannot rotate in place, reaching
+a reversed heading genuinely requires a K-turn/loop-out manoeuvre
+rather than a spin, directly exercising Section~\ref{sec:cusp-freeze}'s
+corner-extending smoother and Section~\ref{sec:mppi-critic}'s
+\texttt{EarlyCommitCritic}. \texttt{SmacPlannerHybrid}'s initial plan
+(48 waypoints, 1 cusp) was replanned once mid-run, after the live
+costmap invalidated it, to a final 22-waypoint, 4-cusp path. The goal
+was accepted at epoch 1789046995.425. \texttt{Goal succeeded} was
+reported \SI{29.3}{\second} later with zero recovery behaviours
+triggered.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        width=\textwidth, height=6.5cm,
+        xlabel={Time since goal accepted (s)}, ylabel={Speed (m/s)},
+        xmin=0, xmax=30.3, ymin=-0.36, ymax=0.42,
+        grid=major, grid style={gray!15},
+        legend pos=south east, legend style={font=\footnotesize, draw=gray!50},
+        axis lines=left,
+      ]
+      \addplot[thick, dashed, blue!70!black] coordinates {
+        (0.136,0.0750) (0.386,0.3000) (0.636,0.2998) (0.936,0.3000) (1.186,0.3000) (1.486,0.2997) (1.736,0.3000) (2.036,0.2989) (2.286,0.3000) (2.586,0.3000) (2.836,0.3000) (3.136,0.3000) (3.386,0.3000) (3.686,0.3000) (3.936,0.3000) (4.236,0.3000) (4.486,0.3000) (4.786,0.3000) (5.036,0.3000) (5.336,0.3000) (5.586,0.3000) (5.886,0.3000) (6.136,0.3000) (6.436,0.2980) (6.686,0.3000) (6.986,0.2631) (7.235,0.2923) (7.536,0.2943) (7.786,0.2848) (8.086,0.2361) (8.335,0.2779) (8.635,0.0963) (8.885,-0.2043) (9.186,-0.2000) (9.435,-0.1984) (9.735,-0.2000) (9.985,-0.1974) (10.285,-0.2000) (10.536,-0.1976) (10.835,-0.1956) (11.086,-0.1909) (11.385,-0.2007) (11.635,0.0789) (11.936,0.2641) (12.185,0.0432) (12.486,-0.0686) (12.736,0.0162) (13.036,0.0332) (13.285,-0.0178) (13.585,-0.0239) (13.836,-0.0235) (14.135,0.1837) (14.386,0.0715) (14.686,0.0177) (14.935,-0.0021) (15.235,0.1395) (15.485,0.1888) (15.735,0.2008) (16.035,0.1838) (16.285,0.1862) (16.586,0.1785) (16.836,0.1715) (17.135,-0.0870) (17.385,-0.1995) (17.685,-0.2000) (17.935,-0.2000) (18.236,-0.2000) (18.486,-0.1953) (18.786,-0.2008) (19.035,-0.1936) (19.335,0.2564) (19.585,0.2819) (19.885,0.2778) (20.135,0.2890) (20.435,0.2315) (20.686,0.0685) (20.985,0.1445) (21.235,0.0088) (21.535,-0.0659) (21.785,-0.1479) (22.085,0.1004) (22.335,0.0690) (22.635,-0.0359) (22.886,-0.0001) (23.188,-0.2059) (23.435,-0.1979) (23.735,-0.1985) (23.985,-0.1992) (24.285,-0.1997) (24.535,-0.2000) (24.835,-0.2000) (25.086,-0.2000) (25.385,-0.2000) (25.636,-0.2000) (25.935,-0.2000) (26.185,-0.2000) (26.485,-0.1998) (26.735,-0.1824) (27.035,-0.2002) (27.285,-0.2000) (27.585,-0.1981) (27.836,-0.1605) (28.135,-0.2028) (28.385,-0.2027) (28.685,-0.1629) (28.935,-0.1950) (29.235,-0.1632) (29.485,0.0000) (29.785,0.0000) (30.035,0.0000)
+      };
+      \addlegendentry{Commanded (\texttt{/cmd\_vel})}
+      \addplot[thick, orange!90!black] coordinates {
+        (0.000,0.0000) (0.211,0.0306) (0.442,0.0848) (0.688,0.1347) (0.917,0.1937) (1.140,0.2521) (1.392,0.2865) (1.637,0.3074) (1.842,0.3435) (2.116,0.3620) (2.335,0.3662) (2.563,0.3735) (2.793,0.3772) (3.041,0.3670) (3.264,0.3688) (3.489,0.3615) (3.741,0.3514) (3.987,0.3394) (4.193,0.3468) (4.442,0.3372) (4.662,0.3142) (4.892,0.3295) (5.138,0.3089) (5.389,0.2718) (5.589,0.2641) (5.841,0.2577) (6.060,0.2420) (6.295,0.2541) (6.536,0.2422) (6.763,0.2286) (6.991,0.2356) (7.237,0.2167) (7.460,0.2019) (7.684,0.1431) (7.918,0.1623) (8.191,0.1339) (8.383,0.1269) (8.616,0.1230) (8.880,0.0031) (9.083,-0.1137) (9.318,-0.1874) (9.581,-0.2103) (9.784,-0.2267) (10.017,-0.2527) (10.280,-0.2635) (10.483,-0.2713) (10.716,-0.2348) (10.982,-0.2182) (11.185,-0.2222) (11.417,-0.2040) (11.680,-0.1238) (11.884,0.0820) (12.118,0.1240) (12.381,0.0538) (12.584,-0.0932) (12.817,-0.0133) (13.080,0.0576) (13.288,0.0985) (13.515,-0.0386) (13.782,-0.0997) (13.985,-0.1410) (14.215,0.0555) (14.482,0.1134) (14.682,0.0012) (14.918,0.0003) (15.135,-0.0336) (15.387,0.0413) (15.633,0.0928) (15.835,0.1300) (16.087,0.1602) (16.333,0.1421) (16.536,0.1404) (16.789,0.1208) (17.017,0.0613) (17.238,-0.0380) (17.482,-0.1202) (17.719,-0.1781) (17.954,-0.2264) (18.188,-0.2597) (18.383,-0.2681) (18.618,-0.2918) (18.861,-0.3173) (19.086,-0.3197) (19.316,-0.1537) (19.584,0.0904) (19.785,0.1573) (20.016,0.2073) (20.286,0.2433) (20.487,0.2790) (20.737,0.2700) (20.962,0.0878) (21.192,0.0387) (21.438,0.0069) (21.663,-0.0816) (21.892,-0.1516) (22.139,-0.0275) (22.364,0.0005) (22.591,-0.0006) (22.840,-0.0335) (23.041,-0.0319) (23.292,-0.0766) (23.542,-0.1351) (23.732,-0.1601) (23.992,-0.1764) (24.241,-0.1813) (24.441,-0.1682) (24.690,-0.1584) (24.939,-0.1384) (25.135,-0.1398) (25.388,-0.1665) (25.639,-0.1862) (25.839,-0.2101) (26.142,-0.2042) (26.349,-0.2361) (26.586,-0.2335) (26.838,-0.2478) (27.039,-0.2484) (27.268,-0.2462) (27.540,-0.2606) (27.740,-0.2659) (27.984,-0.2670) (28.238,-0.2600) (28.438,-0.2798) (28.667,-0.2545) (28.937,-0.2605) (29.142,-0.2553) (29.369,-0.2689) (29.611,-0.1234) (29.830,0.0000) (30.066,0.0000) (30.288,0.0000)
+      };
+      \addlegendentry{Actual (\texttt{/odom} encoder)}
+      \draw[densely dashed, gray] (axis cs:0,0.30) -- (axis cs:30.3,0.30);
+      \node[gray, font=\tiny, anchor=south east] at (axis cs:30.2,0.315) {speed cap 0.30 m/s};
+      \draw[densely dashed, green!40!black] (axis cs:29.3,-0.36) -- (axis cs:29.3,0.42);
+    \end{axis}
+  \end{tikzpicture}
+  \caption[Goal 3: commanded vs.\ actual speed]{Goal 3
+    (near-\ang{180} reversal): commanded MPPI output vs.\ actual
+    encoder-derived speed. Same logging setup as
+    Figures~\ref{fig:goal1-velocity}--\ref{fig:goal2-velocity}.
+    Negative values are the reversal segment(s) of the manoeuvre;
+    unlike Goals~1 and~2, this path required repeated forward/reverse
+    direction changes to complete the near-\ang{180} turn, visible as
+    the multiple sign changes between $t\approx$\SI{9}{\second} and
+    \SI{23}{\second}. The dotted vertical line at \SI{29.3}{\second}
+    marks \texttt{Reached the goal!}.}
+  \label{fig:goal3-velocity}
+\end{figure}
+
+The vehicle covered \SI{5.576}{\meter} of real (encoder-integrated)
+distance to close a \SI{2.662}{\meter} straight-line displacement,
+reaching a peak forward speed of \SI{0.390}{\meter\per\second} and a
+peak reverse speed of \SI{-0.323}{\meter\per\second} across the
+manoeuvre.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Goal 3: given goal vs.\ final AMCL-estimated pose (map frame).}
+  \label{tab:goal3-pose}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+     & $x$ (m) & $y$ (m) & yaw \\
+    \midrule
+    Given goal & 3.000 & 0.000 & \ang{180.0} \\
+    Final pose & 2.764 & 0.039 & \ang{174.0} \\
+    Error & -0.236 & +0.039 & -\ang{6.0} \\
+    \bottomrule
+  \end{tabular}
+  \\[4pt]
+  \parbox{0.9\textwidth}{\small Position error magnitude: \SI{0.239}{\meter} -- outside the configured \SI{0.12}{\meter} \texttt{xy\_goal\_tolerance}, mostly an $x$-axis undershoot. Yaw error \ang{6.0} is comfortably within the \ang{17.2} (\SI{0.3}{\radian}) \texttt{yaw\_goal\_tolerance}.}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.4\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/goal3-hardware-photo.jpg}
+    \caption{Frame from the handheld hardware recording}
+    \label{fig:goal3-hardware-photo-video}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.4\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/goal3-hardware-photo-2.jpg}
+    \caption{Still photo taken after the trial}
+    \label{fig:goal3-hardware-photo-still}
+  \end{subfigure}
+  \caption[The QCar at rest at the end of the Goal 3 trial]{The physical QCar at rest near the end of the Goal~3 trial,
+    close to the yellow tape goal marker. (a) is a frame extracted
+    from a real-hardware video recording of this run, at lower
+    resolution than the tripod-mounted photos used for Goals~1 and~2
+    since it comes from handheld video rather than a still camera;
+    (b) is a still photo of the same resting vehicle and goal marker,
+    taken immediately afterwards.}
+  \label{fig:goal3-hardware-photo}
+\end{figure}
+
+\section{Map Quality and Localisation Accuracy}
+\label{sec:results-map-localization}
+
+The two general goals above compare a given goal to AMCL's own final
+pose estimate. This is a genuine navigation-accuracy result, but not
+an independent check of that estimate against physical reality, since
+both figures come from the same localisation system. This section
+closes that gap directly with a physical ground-truth measurement,
+using the same hardware map as the two goals above
+(\texttt{maps/qcar\_map\_hardware.yaml}) and, for the localisation
+test, the same straight \SI{2}{\meter} goal and start position as
+Goal~1.
+
+\subsection{Map Quality}
+\label{sec:results-map-quality}
+
+Three reference spans were each measured two ways: the map-frame
+distance between two corners, read via RViz's \texttt{Publish Point}
+tool on \texttt{/clicked\_point} and a direct tape measurement of the
+same real-world span. Table~\ref{tab:results-map-quality} presents all
+three.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Map-frame distance versus physical tape measurement, three reference spans.}
+  \label{tab:results-map-quality}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Span & Map distance & Tape distance & Discrepancy \\
+    \midrule
+    A (long corridor wall, full length) & \SI{5.255}{\meter} & \SI{5.550}{\meter} & \SI{0.295}{\meter} (5.3\% under) \\
+    B (corridor width) & \SI{1.584}{\meter} & \SI{1.700}{\meter} & \SI{0.116}{\meter} (6.8\% under) \\
+    C (alcove/doorway width) & \SI{1.298}{\meter} & \SI{1.350}{\meter} & \SI{0.052}{\meter} (3.9\% under) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The map consistently \emph{underestimates} real distance by roughly
+4--7\%, regardless of span length (\SIrange{1.3}{5.5}{\meter}) or
+orientation. A one-directional bias of similar magnitude across three
+such different spans points to a real map-scale error rather than
+corner-picking imprecision -- the map resolution itself
+(\SI{0.05}{\meter}/pixel) cannot explain a multi-decimetre discrepancy
+on the longest span.
+
+\subsection{Localisation Accuracy Ground-Truth}
+\label{sec:results-localization-accuracy}
+
+The same straight-line goal used for Goal~1 (map-frame position
+$(2.0, 0.0)$, heading \ang{0}) was sent three times via the
+\texttt{NavigateToPose} action client,\footnote{Sent via
+\texttt{ros2 action send\_goal}, not the \texttt{ros2 topic pub
+/goal\_pose} method used earlier in this project: a \texttt{BEST\_EFFORT},
+no-retransmission topic combined with a short-lived one-shot publisher
+was found during this session to intermittently drop the goal
+entirely, with no BT tick and no planner call. The action interface's
+handshaked accept/reject protocol does not share this failure mode.}
+resetting the vehicle to the same start tape mark each time. AMCL's
+final pose was compared against a direct physical measurement: tape
+distance from the start mark and yaw derived from front/rear-wheel
+lateral offsets using the wheelbase measured in
+Section~\ref{sec:steering-trim} ($L = \SI{0.25725}{\meter}$), the same
+principle as that section's own trim calibration.
+Table~\ref{tab:results-localization-accuracy} presents all three
+trials.
+
+\begin{table}[htbp]
+  \centering
+  \caption{AMCL-reported final pose versus physical ground truth, three trials of the same straight \SI{2}{\meter} goal.}
+  \label{tab:results-localization-accuracy}
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    Trial & AMCL forward & Tape forward & Gap & AMCL yaw & Tape-derived yaw \\
+    \midrule
+    1 & \SI{1.838}{\meter} & \SI{1.97}{\meter} & 6.7\% under & \ang{-1.76} & not measured \\
+    2 & \SI{1.820}{\meter} & \SI{1.99}{\meter} & 8.5\% under & \ang{4.93} & \ang{4.45} \\
+    3 & \SI{1.770}{\meter} & \SI{1.98}{\meter} & 10.6\% under & \ang{-2.21} & \ang{-2.23} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Two findings follow. AMCL's yaw estimate matches the
+independently tape-derived yaw closely on both trials where the latter
+was measured (\ang{4.93} vs.\ \ang{4.45}; \ang{-2.21} vs.\
+\ang{-2.23}). This is strong evidence that AMCL's \emph{orientation}
+estimate is accurate. AMCL also consistently under-reports how far
+the vehicle actually travelled: the gap grows trial to trial
+(6.7\% $\to$ 8.5\% $\to$ 10.6\%) despite every trial commanding and
+physically covering essentially the same distance, matching in
+direction and comparable in magnitude to Test~1's map-scale finding
+above.
+
+\subsection{A LiDAR Range Calibration Curve and a Shared-Bias Hypothesis}
+\label{sec:results-lidar-bias}
+
+The growing, direction-consistent gap between Sections~\ref{sec:results-map-quality}
+and~\ref{sec:results-localization-accuracy} raised a further question,
+tested ad hoc within the same session: does this bias originate at the
+LiDAR sensor itself, or somewhere in the SLAM/mapping pipeline? What
+began as a single \SI{1}{\meter} spot-check was expanded, within the
+same session, into a five-point curve once the first result proved
+informative. The vehicle was positioned with the LiDAR's rotation
+centre at each tape-measured distance from a flat wall. The raw
+\texttt{/scan} range at the beam pointing directly at the wall showed
+a clean V-shaped minimum across neighbouring beams every time,
+confirming genuine flat-wall geometry rather than a single noisy
+reading. Table~\ref{tab:results-lidar-curve} presents all five points.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Raw LiDAR range versus tape-measured distance from a flat wall, five points.}
+  \label{tab:results-lidar-curve}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Tape distance & Raw LiDAR range & Gap & \% short \\
+    \midrule
+    \SI{0.5}{\meter} & \SI{0.490}{\meter} & \SI{0.010}{\meter} & 1.9\% \\
+    \SI{1.0}{\meter} & \SI{0.968}{\meter} & \SI{0.032}{\meter} & 3.2\% \\
+    \SI{2.0}{\meter} ($\times 2$) & \SI{1.884}{\meter} / \SI{1.890}{\meter} & \SI{0.113}{\meter} avg & 5.7\% avg \\
+    \SI{3.0}{\meter} & \SI{2.762}{\meter} & \SI{0.238}{\meter} & 8.0\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Neither a pure fixed-offset nor a pure fixed-percentage model fits
+this curve: the percentage error grows roughly linearly with distance
+(approximately $+1.9$ percentage points per metre), meaning the
+absolute gap grows closer to quadratically. A least-squares fit across
+all five points gives
+
+\begin{equation}
+  r_{\text{raw}} \approx 0.910 \, r_{\text{true}} + \SI{0.053}{\meter},
+  \label{eq:lidar-bias-fit}
+\end{equation}
+
+i.e.\ a combined $\approx 9\%$ range-scale compression plus a small
+positive fixed offset, not one or the other alone. The two
+\SI{2}{\meter} repeats agree within \SI{6}{\milli\meter}, making this
+a low-noise, well-characterised curve rather than a single uncertain
+data point.
+
+Taken together, all three tests point toward one shared cause rather
+than three independent effects: a bias that grows as it propagates
+through the pipeline:
+\begin{gather*}
+  \text{raw LiDAR (1.9--8.0\%, growing with range)} \\
+  \Downarrow \\
+  \text{SLAM-built map (3.9--6.8\%)} \\
+  \Downarrow \\
+  \text{AMCL-localised pose (6.7--10.6\%, growing)}
+\end{gather*}
+The leading hypothesis is that the LiDAR's own range-scale
+nonlinearity (Equation~\ref{eq:lidar-bias-fit}) is amplified through
+Cartographer's pose-graph optimisation into the larger map-scale
+error, which AMCL then inherits directly, since it localises purely
+within the map's own (slightly compressed) coordinate frame rather
+than against any independent physical reference. This hypothesis is
+not yet corrected. The session characterised and connected all
+three findings and produced a real, low-noise correction curve
+(Equation~\ref{eq:lidar-bias-fit}), but did not apply it to the LiDAR
+driver or the map itself. The direct next step is to apply this
+correction if the driver exposes a range-scale or range-offset
+parameter, then re-run
+Sections~\ref{sec:results-map-quality}--\ref{sec:results-localization-accuracy}
+to confirm it closes the gap (Chapter~\ref{ch:summary}'s Prospects).
+
+\paragraph{A caveat this reopens for Section~\ref{sec:goal2-curved}.}
+If AMCL under-reports real distance travelled by a margin comparable
+to Goal~1 and Goal~2's own position errors (\SI{0.214}{\meter} and
+\SI{0.129}{\meter}), then the \texttt{GoalCritic}/\texttt{PathAlignCritic}
+tension identified there may not be the sole contributor to those two
+figures. Some fraction of both may instead reflect the vehicle
+sitting closer to its true physical goal than AMCL's own
+(scale-compressed) estimate reports. Both explanations can be true
+simultaneously and are not mutually exclusive. This thesis does not
+have the data to separate their individual contributions for the two
+specific 2026-09-07 trials, since neither was independently
+ground-truth-measured at the time. It reports both candidate causes
+here rather than favouring one without evidence.
+
+\section{Limitations}
+\label{sec:results-limitations}
+
+The results above are real and, where a number is given, directly
+measured. But a complete picture of this thesis's final state also
+requires stating plainly what was not established. Seven items
+follow: five are carried forward from the sections above, the sixth
+is structural to the project as a whole and the seventh is a
+hardware defect observed throughout testing but never root-caused.
+
+\begin{enumerate}
+  \item \textbf{No systematic, pre-planned goal-reaching success-rate
+    campaign across varied goal geometries.} Section~\ref{sec:results-goal-reaching}
+    now has three genuine repeated-trial hardware results -- the
+    K-turn goals (2/2, Section~\ref{sec:results-cusp}) and Goal~2
+    repeated four times (4/4 succeeded, real variability in duration,
+    cusps and position error). But these are separate,
+    individually-motivated repeat sessions on specific goals, not one
+    pre-planned campaign spanning a varied,
+    fixed set of goal poses and geometries that would produce a single
+    defensible ``X out of Y goals succeeded'' headline number for the
+    vehicle as a whole. This project's hardware access concluded with
+    the 2026-09-10 session reported throughout this chapter. No
+    further hardware time was available to run such a campaign. This
+    remains an open limitation rather than a planned next step (see
+    Chapter~\ref{ch:summary}'s Prospects for what such a campaign would
+    have needed to cover).
+  \item \textbf{Two results predate the project's own final fixes.}
+    The sim-versus-real overshoot comparison
+    (Section~\ref{sec:results-sim-vs-real}) and the navigation-timing
+    figures behind Section~\ref{sec:results-goal-reaching}'s caveat
+    were both measured before the \texttt{readMode=0} fix
+    (Section~\ref{sec:readmode-bug}) and, in the sim-versus-real
+    case, before throttle calibration as well. Both are reported as
+    the pre-fix gap that genuinely existed at that point in the
+    project, not silently updated or removed, but neither has been
+    re-measured under the final configuration.
+  \item \textbf{The curvature-continuing cusp refinement is
+    simulation-only.} Section~\ref{sec:cusp-continued-iteration}'s
+    most recent smoother refinements are, at the time of writing,
+    verified only in simulation; the hardware-validated 2/2 result
+    above belongs to the earlier, straight-line version of the
+    smoother, not this refinement.
+  \item \textbf{Low-speed closed-loop control was out of scope.}
+    Section~\ref{sec:final-calibration} identified
+    sub-\SI{0.25}{\meter\per\second} open-loop duty control as
+    unreliable in principle, not as a remaining tuning gap -- closing
+    it would require an encoder-feedback velocity loop that this
+    thesis does not implement.
+  \item \textbf{A map-scale and localisation bias was found and
+    characterised, but not root-caused or corrected.}
+    Section~\ref{sec:results-map-localization}'s ground-truth
+    measurements found the saved map underestimates real distance by
+    4--7\%, AMCL's reported forward distance under-reports physical
+    travel by a growing 6.7--10.6\% and even the raw LiDAR range
+    itself is 1.9--8.0\% short against a tape-measured reference,
+    growing with distance (Equation~\ref{eq:lidar-bias-fit}). This
+    looks like a single bias that grows as it propagates from sensor,
+    through SLAM, to localisation, rather than three independent
+    effects. The leading hypothesis (a LiDAR range-scale bias amplified
+    by Cartographer's pose-graph optimisation) is not yet confirmed
+    and neither the map nor the LiDAR calibration was corrected in
+    response. This thesis characterises and connects the finding,
+    including a low-noise correction curve, without resolving it.
+  \item \textbf{The scope was navigation, not full autonomy.} This
+    thesis addresses reaching a given goal pose reliably; it does not
+    address perception-driven goal selection, dynamic obstacle
+    avoidance beyond Nav2's stock costmap layers, or multi-goal
+    mission planning. Each is a substantial extension in its own
+    right, named explicitly in Chapter~\ref{ch:summary}'s Prospects
+    rather than left as an unstated boundary of the work.
+  \item \label{item:lidar-render-freeze} \textbf{The LiDAR scan display still freezes momentarily during
+    sharp turns and sudden forward acceleration.} This symptom
+    recurred throughout hardware testing across this project and
+    remains unresolved at the time of writing. It has not been
+    root-caused. Whether it affects only the RViz visualisation or
+    the underlying \texttt{/scan} stream Nav2 itself consumes is not
+    established.
+\end{enumerate}
+
 \section{Applicability of the Results}
 \label{sec:results-applicability}
-
-\subsection{Beyond This Specific QCar Unit}
-\label{sec:applicability-unit}
 
 The throttle deadband/gain values (Equation~\ref{eq:throttle-calibration})
 and the steering-trim value (Section~\ref{sec:steering-trim}) are
 per-unit calibration constants, expected to differ, potentially
 substantially, on a different physical QCar chassis, or even on
 this same chassis under different tyre wear, floor surface, or
-battery charge conditions -- the calibration explicitly found this
-floor to drift within a single session (Section~\ref{sec:deadband-discovery}).
-The \emph{method} used to find them -- an empirical fixed-duty sweep
-under real load, rather than an analytically derived or single-point
-gain estimate -- is expected to transfer directly to any similarly
-actuated small-scale ground vehicle, independent of the specific
-numeric result.
+battery charge conditions. This was confirmed directly, not only in
+principle, by a 2026-09-10 hardware session weeks after the
+calibration above. Three clean, repeated \SI{2}{\meter} forward runs
+at three different commanded speeds all showed a consistent
+$\approx$\SI{10}{\percent} undershoot against
+Equation~\ref{eq:throttle-calibration}'s prediction, so
+\texttt{THROTTLE\_GAIN} was re-fitted from \num{0.0667} to
+\num{0.077} for that session. Reverse-direction driving showed a
+further, distinct issue: stop latency and extra distance were
+consistently 2--4$\times$ worse than forward's at every tested speed.
+A single spot-check
+(\SI{1}{\meter}~@~\SI{-0.3}{\meter\per\second}) later in the same
+session came back statistically identical to forward's normal
+numbers, an intermittent effect. A physical inspection (wheels,
+axle couplings) found no mechanical fault, pointing instead to the
+open rear differential's own load-dependent torque redistribution as
+a real, physically-expected contributor to run-to-run traction
+variability that no static software gain constant can fully correct
+for. The \emph{method} used to find these constants is an empirical
+fixed-duty sweep under real load, rather than an analytically derived
+or single-point gain estimate. It is expected to transfer directly to
+any similarly actuated small-scale ground vehicle, independent of the
+specific numeric results.
 
-\subsection{Beyond the QCar Platform}
-\label{sec:applicability-platform}
-
-The \texttt{readMode} buffering defect (Section~\ref{sec:readmode-bug})
-is specific to the Quanser HAL's task-based I/O mode, but the general
-failure class it represents -- a background acquisition task started
-at object-construction time, with a read-consumption rate that
-happens to match its production rate closely enough that a
-start-up-gap backlog never drains -- is a generic ring-buffer hazard
-that is not specific to this vendor's library, and is worth checking
-for in any hardware abstraction layer offering a buffered or
-task-based I/O mode as an alternative to immediate/polled reads,
-particularly where the buffer is initialised eagerly rather than on
-first read. The diagnostic principle that resolved it -- when an
-internally self-consistent software abstraction (here, the
-\texttt{Odometry} class) produces a value that contradicts direct
-physical observation, verify the abstraction's own \emph{input}, not
-only its internal consistency -- is a general debugging principle,
-not specific to this project at all.
-
-\subsection{Beyond Navigation}
-\label{sec:applicability-domain}
-
-The active-braking safety incident (Section~\ref{sec:active-braking})
-and its resolution generalise directly to any reactive
-feedback-control design intended for direct hardware deployment on a
-system with confirmed actuator lag or inertia, regardless of
-application domain: this project's standing rule -- trace new
-reactive control logic through by hand for an overshoot scenario, or
-validate it in simulation, before it reaches a physical actuator --
-is a general control-engineering caution reinforced, not discovered,
-by this project's own experience.
+Two further findings generalise beyond this platform and this
+domain. The \texttt{readMode} buffering defect
+(Section~\ref{sec:readmode-bug}) is specific to the Quanser HAL's
+task-based I/O mode. The general failure class it represents is a
+background acquisition task started at object-construction time,
+with a read-consumption rate that happens to match its production
+rate closely enough that a start-up-gap backlog never drains. This is
+a generic ring-buffer hazard worth checking for in any hardware
+abstraction layer offering a buffered or task-based I/O mode as an
+alternative to immediate/polled reads. The diagnostic principle that
+resolved it is a general debugging principle, not specific to this
+project: when an internally self-consistent software abstraction
+produces a value that contradicts direct physical observation,
+verify the abstraction's own \emph{input}, not only its internal
+consistency. Similarly, the active-braking safety
+incident (Section~\ref{sec:active-braking}) and its resolution
+generalise directly to any reactive feedback-control design intended
+for direct hardware deployment on a system with confirmed actuator
+lag or inertia, regardless of application domain: trace new reactive
+control logic through by hand for an overshoot scenario, or validate
+it in simulation, before it reaches a physical actuator.

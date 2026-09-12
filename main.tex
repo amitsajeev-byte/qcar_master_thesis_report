@@ -23,12 +23,14 @@
 % Internal thesis (at the university, not a company) - no company
 % supervisor/company fields, see frontmatter/titlepage.tex.
 \newcommand{\thesisTitle}{Development of a SLAM and Autonomous Navigation System for a Self-Driving Car}
+\newcommand{\thesisTitleGerman}{Entwicklung eines SLAM und autonomen Navigationssystems für ein selbstfahrendes Auto}
 \newcommand{\thesisAuthor}{Amit Sajeev}
-\newcommand{\thesisDegree}{Master of Engineering} % TODO: confirm exact degree title (M.Eng./M.Sc./...) with the Centre for Studies
-\newcommand{\thesisProgramme}{Artificial Intelligence for Smart Sensors / Actuators}
+\newcommand{\thesisDegree}{Master of Engineering (M.Eng.)}
+\newcommand{\thesisProgramme}{Master Artificial Intelligence for Smart Sensors and Actuators}
 \newcommand{\thesisSupervisorDIT}{Prof. Dr. Dmitrii Dobriborsci}
 \newcommand{\thesisSubmissionDate}{14.09.2026}
 \newcommand{\thesisMatrikelNr}{22306894}
+\newcommand{\thesisPlace}{Cham}
 
 \begin{document}
 
@@ -36,10 +38,17 @@
 \pagenumbering{roman}
 \input{frontmatter/titlepage}          % no page number, per guideline 4.1.1
 
-\input{frontmatter/authorship}         % Statement of Authorship - no page number, per 4.1.4
+% \input{frontmatter/acknowledgement}  % TODO: optional, uncomment if you want one (guideline 4.1.3) - precedes Authorship per guideline order
+% \clearpage
+
+\input{frontmatter/authorship}         % Declaration - mandatory per abschlussarbeit_anmeldung_master_mss_en.pdf, bound directly after title page, no page number
 \clearpage
 
-% \input{frontmatter/acknowledgement}  % TODO: optional, uncomment if you want one (guideline 4.1.3)
+\input{frontmatter/ai_declaration}     % Declaration Concerning Usage of AI - separate page, no page number
+\clearpage
+
+\input{frontmatter/abbreviations}       % per guideline 4.1.5 - precedes Abstract per guideline order
+\clearpage
 
 \input{frontmatter/abstract}           % 120-150 words, per guideline 4.1.6
 \clearpage
@@ -51,9 +60,6 @@
 \clearpage
 
 \listoftables
-\clearpage
-
-\input{frontmatter/abbreviations}       % per guideline 4.1.5
 \clearpage
 
 % ---------------- Main matter (arabic, restart at 1) -----------------
