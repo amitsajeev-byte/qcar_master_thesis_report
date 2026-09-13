@@ -277,7 +277,7 @@ estimate pose from scratch. A single-track model is a simplification: it assumes
 slip and treats both front wheels as a single steering angle rather
 than the true Ackermann-differentiated pair. Chapter~\ref{ch:calibration}
 presents direct evidence of where this simplification's limits were
-reached in practice on physical hardware
+reached in practice on QCar
 (Section~\ref{sec:deadband-discovery}).
 
 \subsection{The True Two-Wheel Ackermann Angle}
@@ -870,7 +870,7 @@ these. It relies solely on the 2D LiDAR for mapping, localisation
 and obstacle sensing, with pose estimation between LiDAR updates
 coming from wheel-encoder-based odometry rather than the IMU.
 
-The IMU is electrically present and exposed by the vendor's HAL/PAL
+The IMU is electrically present and exposed by QCar's HAL/PAL
 library (\texttt{gyroscope}/\texttt{accelerometer} fields), but
 nothing in this project's software stack reads it. Cartographer's
 \texttt{use\_imu\_data} is left \texttt{false}. No IMU sensor

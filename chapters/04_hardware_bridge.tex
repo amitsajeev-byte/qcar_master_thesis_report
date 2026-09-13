@@ -7,12 +7,14 @@ to the physical QCar. Section~\ref{sec:rmw-incompatibility}
 establishes why native ROS~2 communication with the robot's onboard
 compute is not available, which motivates the TCP/JSON bridge
 architecture of Section~\ref{sec:bridge-architecture}. The remaining
-sections document the sensor and actuator correctness issues found
+sections document the sensor correctness issues found
 while bringing that bridge up to the same fidelity as the simulation
 stack: LiDAR angle convention (Section~\ref{sec:lidar-angle}),
-odometry (Section~\ref{sec:onboard-bridge-odom}), steering trim
-(Section~\ref{sec:steering-trim}) and inter-machine clock
-synchronisation (Section~\ref{sec:clock-offset}).
+odometry (Section~\ref{sec:onboard-bridge-odom}) and inter-machine clock
+synchronisation (Section~\ref{sec:clock-offset}). Steering-trim
+calibration, an actuator correction rather than a bridge-fidelity
+fix, is presented in Chapter~\ref{ch:calibration} alongside this
+project's other vehicle calibration work.
 
 \section{Why Native ROS~2 Communication With the QCar Is Not Available}
 \label{sec:rmw-incompatibility}
@@ -451,241 +453,6 @@ and throttle calibration. It is still worth naming explicitly as a
 non-zero, if small, contributor to dead-reckoning drift over a long
 enough drive.
 
-\section{Steering-Trim Calibration}
-\label{sec:steering-trim}
-
-A small but consistent steering bias was present on this specific
-chassis: the vehicle drifted laterally under a nominally straight,
-zero-steering command. The physical steering linkage
-could not be adjusted to correct it mechanically. The fix was
-implemented in software instead, as a constant offset
-(\texttt{STEERING\_TRIM}, an early estimate of \SI{-0.08}{\radian},
-later refined to \SI{-0.087}{\radian} in
-Section~\ref{sec:steering-gain} below) applied only at the point the
-steering command is written to the servo. Calibration proceeded in
-two stages: an initial static test (motor off, holding candidate
-angles and judging visually against a reference, preserved as
-\texttt{calibrate\_steering.py} for future re-calibration) narrowed
-the value to roughly the right range. A series of real
-straight-line driving tests (drive a known distance, measure the
-resulting lateral offset, compute
-$\delta_{\text{trim}} = \arctan(\text{offset}/\text{distance})$)
-refined it further. This data carried real measurement noise. Lateral offset depends on
-the vehicle's initial aim at the start of each test run, not purely
-on trim, so the calibration deliberately did not over-fit a precise
-value from only two data points. A
-consistent directional nudge toward zero observed drift converged
-faster in practice than attempting a precise interpolation.
-
-This first-pass value was accepted once a \SI{4.4}{\meter} test drive
-showed no reported drift. It is described as ``almost accurate,'' a
-deliberate acceptance of a small residual rather than a claim of
-exact zero. As the next section shows, it was in fact only half of
-the real correction this vehicle needed.
-
-\subsection{Steering Gain as a Second, Independent Nonlinearity}
-\label{sec:steering-gain}
-
-The trim calibration above corrects only the steering command's
-\emph{offset} -- what the vehicle does at a commanded angle of zero.
-It says nothing about whether a nonzero commanded angle produces the
-correct amount of real wheel deflection. For a long period of
-this project nobody had verified that separately. The gap surfaced
-directly during Nav2 integration (Chapter~\ref{ch:nav-integration}):
-I reported that autonomous navigation on real
-hardware was ``not turning as well as sim,'' a complaint that a pure
-offset error cannot explain, since an offset only shifts the
-zero-point and leaves proportionality untouched.
-
-\paragraph{Steering-gain test.} With a fresh battery fitted and
-the test speed raised to \SI{0.4}{\meter\per\second}, confirmed via
-logged velocity to sit safely above the stiction floor, a seven-point
-sweep of commanded steering angles was driven, each a fresh
-\SI{1}{\meter} arc from a consistent physical start pose.
-\texttt{STEERING\_TRIM} was held at zero throughout, so the commanded
-value was exactly what reached \texttt{car.write()}. The real wheel angle implied by
-each measured lateral deviation was back-solved from the same
-circular-arc geometry as the trim calibration above
-($R = L/\tan\delta$, $y = R(1-\cos(s/R))$, wheelbase
-$L=\SI{0.25725}{\meter}$), using bisection rather than a closed-form
-inverse since the forward relationship is transcendental in $\delta$.
-Table~\ref{tab:steering-gain-sweep} presents the results.
-
-\begin{table}[htbp]
-  \centering
-  \caption{Commanded steering angle versus implied real wheel angle (\texttt{STEERING\_TRIM}=0).}
-  \label{tab:steering-gain-sweep}
-  \begin{tabular}{@{}cc@{}}
-    \toprule
-    Commanded angle (rad) & Implied real angle (rad) \\
-    \midrule
-    $0.00$ & $+0.112$ \\
-    $-0.05$ & $+0.052$ \\
-    $-0.08$ & $+0.018$ \\
-    $-0.085$ & $+0.005$ \\
-    $-0.09$ & $0.000$ \\
-    $-0.10$ & $-0.021$ \\
-    $-0.12$ & $-0.062$ \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{figure}[htbp]
-  \centering
-  \begin{tikzpicture}
-    \begin{axis}[
-        width=0.75\textwidth, height=6.5cm,
-        xlabel={Commanded steering angle $\delta_{\text{cmd}}$ (rad)},
-        ylabel={Implied real wheel angle (rad)},
-        grid=major, grid style={gray!25},
-        legend pos=north west, legend style={font=\small},
-        label style={font=\small}, tick label style={font=\small}
-      ]
-      \addplot[only marks, mark=*, mark size=2pt, color=black]
-        coordinates {(0.00,0.112) (-0.05,0.052) (-0.08,0.018)
-          (-0.085,0.005) (-0.09,0.000) (-0.10,-0.021) (-0.12,-0.062)};
-      \addlegendentry{Measured (seven-point sweep)}
-      \addplot[domain=-0.13:0.01, samples=2, thick, color=gray]
-        {1.39*x + 0.119};
-      \addlegendentry{Fit: $\delta_{\text{real}}=1.39\,\delta_{\text{cmd}}+0.119$, $R^2=0.977$}
-      \addplot[domain=-0.13:0.01, samples=2, dashed, color=gray!60]
-        {1.00*x};
-      \addlegendentry{1:1 (no gain error)}
-    \end{axis}
-  \end{tikzpicture}
-  \caption[Commanded vs.\ implied real steering angle]{Commanded versus implied real steering angle
-    (Table~\ref{tab:steering-gain-sweep}), with the fitted regression
-    line against the 1:1 relationship a gain-free kinematic model
-    would predict. The fitted slope of 1.39 is the multiplicative gain
-    error itself; the vertical offset between the two lines at
-    $\delta_{\text{cmd}}=0$ separately reflects the zero-point trim
-    before it was corrected.}
-  \label{fig:steering-gain-fit}
-\end{figure}
-
-The relationship is clean, monotonic and shows no sign flips or
-stalls. A least-squares linear fit,
-$\delta_{\text{real}} = m \, \delta_{\text{cmd}} + c$, gives
-$m = 1.39$, $c = \SI{0.119}{\radian}$, $R^2 = 0.977$ (the two
-largest-magnitude commands sit slightly above the fitted line, a mild
-hint of additional curvature at large angles not investigated
-further). Two conclusions follow directly. The true zero-point
-trim is $\delta_{\text{cmd}} = -0.09$, not the $-0.08$ found by the
-coarser static test above, pinned by direct interpolation between
-the $-0.085$ (implied $+0.005$) and $-0.09$ (implied $0.000$) rows.
-Independently of the trim value entirely, the real wheel
-also turns approximately 39\% \emph{further} than the kinematic model's
-commanded angle implies for any non-zero command. This is a genuine
-multiplicative gain error, not an offset and one that a pure trim
-correction cannot fix. This gain error is a strong candidate explanation for the
-original complaint that motivated the investigation. Nav2's planner
-and MPPI controller both assume the kinematic model of
-Section~\ref{sec:true-ackermann} maps 1:1 onto real wheel angle. A
-vehicle that over-rotates by 39\% for every commanded turn would
-visibly overshoot turns and cut corners tighter than planned,
-exactly the symptom reported.
-
-\paragraph{Fix and validation.} A documentation check first confirmed
-that no factory steering calibration exists to consult. The Quanser
-hardware manual \cite{quanser2023qcar} documents only the raw servo
-command range and the physical maximum wheel angle
-(Table~\ref{tab:app-safety-limits}). The HAL's own
-\texttt{steeringBias} construction parameter was confirmed left at
-its default of zero in \texttt{qcar\_bridge.py} -- nothing at the
-firmware level was fighting or duplicating the software correction.
-\texttt{STEERING\_GAIN = 1.39} (Listing~\ref{lst:trim-split}'s
-\texttt{apply\_trim()}, which pre-divides the kinematic angle by this
-constant before adding \texttt{STEERING\_TRIM}) was set directly from
-this regression. The trim itself was then refined further, from three
-repeated trials each at commanded $-0.08$, $-0.085$ and $-0.09$ (to
-average out human placement and measurement noise): the zero-crossing
-of the three averaged measurements gave a final
-\texttt{STEERING\_TRIM = -0.087}. A dedicated validation drive commanded a real kinematic turn of
-\SI{0.15}{\radian} over a \SI{1}{\meter} arc at
-\SI{0.4}{\meter\per\second}, predicting \SI{28.5}{\centi\meter} of
-lateral deflection. The measured deflection was \SI{27}{\centi\meter},
-a residual error of $\approx$5.6\%, down from $\approx$39\% with no
-gain correction at all. The fix was subsequently
-confirmed in genuine closed-loop use. After re-running autonomous
-Nav2 navigation on the physical vehicle post-deployment, my
-direct assessment was that turning behaviour had visibly
-improved. This is consistent with the gain error having been the
-dominant cause of the original complaint rather than merely a
-contributing factor.
-
-As with the throttle calibration constants of
-Section~\ref{sec:final-calibration}, both \texttt{STEERING\_GAIN} and
-\texttt{STEERING\_TRIM} are per-unit values, expected to differ on a
-different physical chassis. The empirical sweep-and-regression
-\emph{method} used to find them is the transferable result, not the
-specific numbers. One operational caution from this investigation is
-also worth recording: testing a previously untested steering-angle
-magnitude can produce more real curvature than expected. Available
-clearance should be confirmed in the new command's actual curve
-direction before testing it, not only in directions already validated
-at smaller magnitudes.
-
-\subsection{A Trim-Placement Bug and the ``Apply at the Actuator Boundary'' Principle}
-\label{sec:trim-boundary-principle}
-
-The first implementation of this trim contained a real bug worth
-recording as a general principle for any per-unit hardware
-calibration constant, not only this one. It folded the trim into the
-\emph{same} steering value used both for the real servo command
-\emph{and} for the odometry dead-reckoning calculation in
-Section~\ref{sec:onboard-bridge-odom}. The entire purpose of
-the trim is to make the real wheels read approximately zero deflection
-despite a nonzero servo command. Feeding that same trimmed value into
-odometry made the dead-reckoning model believe the wheels were
-deflected by the trim amount, even while the vehicle was in reality
-driving dead straight. A live test briefly exposed this directly: a
-straight-line drive of approximately \SI{2.8}{\meter} produced a
-fictitious $y \approx \SI{-1.72}{\meter}$ in the odometry output, a
-spurious $\sim$\ang{30} curve that did not correspond to any real
-vehicle motion.
-
-The fix separated \texttt{compute\_steering()} (returns the
-untrimmed, kinematic steering angle, used for odometry) from a new
-\texttt{apply\_trim()} (computes the real servo command, called only
-immediately before the HAL write), shown together in
-Listing~\ref{lst:trim-split}. \texttt{target\_steering} is
-\texttt{compute\_steering()}'s untrimmed return value. It is also what
-Listing~\ref{lst:odometry-class}'s \texttt{odom.update()} call is
-given. \texttt{apply\_trim()} is invoked only once, at the
-\texttt{car.write()} call site itself.
-
-\begin{lstlisting}[language=Python,caption={The kinematic-steering / servo-trim split (\texttt{qcar\_bridge.py}).},label={lst:trim-split}]
-def compute_steering(linear_x, angular_z):
-    # Returns the KINEMATIC (untrimmed) angle - used for odometry.
-    # STEERING_TRIM must NOT be folded in here (see prose above).
-    if abs(linear_x) < 1e-2:
-        steer = 0.0
-    else:
-        steer = math.atan(WHEELBASE * angular_z / linear_x)
-    return max(-MAX_STEER_CMD, min(MAX_STEER_CMD, steer))
-
-
-def apply_trim(kinematic_steering):
-    # Converts a real/kinematic steering angle into the servo command
-    # that achieves it on this vehicle - call only right before
-    # car.write(), never upstream of odometry or anything else that
-    # treats its input as the true physical wheel angle.
-    return max(-MAX_STEER_CMD,
-               min(MAX_STEER_CMD,
-                   kinematic_steering / STEERING_GAIN + STEERING_TRIM))
-\end{lstlisting}
-
-Re-verified with the same drive
-command, the odometry then correctly read $y \approx 0$. The general
-principle this illustrates is stated here explicitly, because it is
-expected to generalise to any future per-unit hardware calibration
-constant on this or a similar platform: a calibration constant
-compensating for a specific actuator's physical imperfection should
-be applied \emph{as late as possible, immediately at the actuator
-boundary}. It should never be applied upstream of any computation,
-such as odometry, that treats its input as an accurate, ground-truth
-kinematic quantity.
-
 \section{Clock Synchronisation and the Receipt-vs-Capture Timestamp Bug}
 \label{sec:clock-offset}
 
@@ -765,10 +532,6 @@ conversion.
 
 \begin{lstlisting}[language=Python,caption={Converting a QCar-local capture timestamp to the development PC's clock (\texttt{qcar\_relay\_node.py}).},label={lst:clock-offset-code}]
 def qcar_time_to_stamp(qcar_time, qcar_clock_offset):
-    '''Converts a QCar-clock time.time() reading into a
-    builtin_interfaces/Time on this machine's clock, correcting for
-    the measured offset between the two machines' independent,
-    unsynchronized clocks.'''
     corrected = qcar_time - qcar_clock_offset
     sec = int(corrected)
     nanosec = int(round((corrected - sec) * 1e9))
@@ -823,7 +586,7 @@ project's final hardware configuration.
 \label{sec:safe-shutdown}
 
 Because two of the four processes in this bridge run directly on
-physical hardware with no supervising ROS~2 lifecycle to fall back
+QCar with no supervising ROS~2 lifecycle to fall back
 on, this project established and documented a fixed shutdown
 sequence, using \texttt{SIGINT} exclusively rather than a plain
 \texttt{pkill} (per the signal-handling fix in
@@ -851,10 +614,10 @@ an ordinary \texttt{/cmd\_vel}-in, \texttt{/odom}/\texttt{/scan}-out
 robot -- despite the underlying reality of two incompatible ROS~2
 distributions connected by a bespoke TCP/JSON protocol. Getting the
 data flowing across that bridge to a fidelity usable by AMCL and
-Nav2, however, required four further, independently discovered
-corrections (LiDAR angle convention, wheel odometry, steering trim
+Nav2, however, required three further, independently discovered
+corrections (LiDAR angle convention, wheel odometry
 and inter-machine clock synchronisation) beyond simply moving bytes
 across the link. Chapter~\ref{ch:calibration} continues directly from
-here, addressing the one remaining discrepancy this chapter's fixes
-do not touch: the relationship between a commanded velocity and the
-vehicle's actual physical speed.
+here, addressing the vehicle's remaining calibration needs: steering
+trim, steering gain and the relationship between a commanded
+velocity and the vehicle's actual physical speed.

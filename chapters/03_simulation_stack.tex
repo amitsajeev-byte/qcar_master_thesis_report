@@ -65,7 +65,7 @@ per-wheel velocity and steering-hub angle from an incoming
 architecture worked, but it duplicated the Ackermann
 inverse-kinematics logic that a purpose-built controller would
 otherwise provide. More importantly for a navigation stack meant to
-reach physical hardware, it could not support Nav2's recovery
+reach QCar, it could not support Nav2's recovery
 behaviours that require reversing, since the manual node had no
 reverse-driving logic of its own.
 
@@ -136,9 +136,6 @@ compensation since its origin carries no mirroring rotation.
     <parent link="base" />
     <child link="wheelrl" />
     <origin rpy="0 0 3.14" xyz="-0.12765 0.05610 0.03338" />
-    <!-- axis negated to compensate for the 180deg yaw above (mesh mirror) -
-         without this the left wheel spins opposite the right wheel for the
-         same signed velocity command -->
     <axis xyz="0 -1 0" />
 </joint>
 
@@ -313,11 +310,8 @@ value is set at all.
             <cylinder radius="0.036" length="0.0245" />
         </geometry>
     </collision>
-    <!-- <visual> (STL mesh) and <inertial> omitted here, unaffected -->
 </link>
 
-<!-- wheel-ground friction - without this the wheels spin freely with 100%
-     slip and the chassis never translates, regardless of PID gains -->
 <gazebo reference="wheelrl">
     <mu1>1.0</mu1>
     <mu2>1.0</mu2>

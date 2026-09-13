@@ -7,23 +7,30 @@
 % only, if you still have the raw CSV/rosbag data from the sessions
 % referenced here.
 
-This chapter documents the longest and most consequential
+This chapter documents this project's vehicle calibration work as a
+whole: two independent problems, both exposed by real-hardware
+testing and both resolved with the same empirical, measurement-first
+approach. The first and larger is the longest and most consequential
 investigation of the project. A real-hardware symptom emerged in
 which the vehicle, commanded to travel a fixed distance and then
 stop, consistently travelled substantially further before actually
 coming to rest, in the worst observed case roughly three times as far.
 What began as a search for a physical explanation (drivetrain
 coasting) ended in the discovery of a stale-data artefact in the
-vendor hardware abstraction layer described in
+QCar hardware abstraction layer described in
 Section~\ref{sec:qcar-platform}. The true physical residual turned out
-to be small once that artefact was removed. The chapter also
-documents a control-design attempt that was tested on physical
-hardware without adequate prior validation and produced a genuine,
-dangerous oscillation. It is included here in full because it is as
-methodologically important as the investigation's eventual successful
-resolution.
+to be small once that artefact was removed. Along the way, the
+chapter documents a control-design attempt that was tested on
+QCar without adequate prior validation and produced a
+genuine, dangerous oscillation, included here in full because it is
+as methodologically important as the investigation's eventual
+successful resolution. The second, independent problem is steering:
+a constant trim offset and a separate multiplicative gain error,
+exposed by a turning-behaviour complaint during Nav2 integration
+that no offset correction alone could explain
+(Section~\ref{sec:steering-trim}).
 
-\section{Problem Statement}
+\section{Throttle Overshoot Problem}
 \label{sec:stop-distance-problem}
 
 With the bridge of Chapter~\ref{ch:hardware-bridge} operational, a
@@ -49,9 +56,13 @@ the investigation's eventual resolution:
     \texttt{0.0} to \texttt{0.1}/\texttt{0.001}, since a value of
     \texttt{0.0} allows the particle filter to freeze permanently once
     it (incorrectly) converges to zero uncertainty under real sensor
-    noise. This failure mode is not exposed by a clean simulation
-    environment. This fix was kept, but it does not explain the
-    stop-distance symptom, which persisted after it was applied.
+    noise. This is the augmented-MCL recovery mechanism detailed in
+    Section~\ref{sec:amcl-math} and evaluated against plain MCL for
+    exactly this kind of recovery scenario in
+    \cite{thrun2001robustmcl}. This failure mode is not exposed by a
+    clean simulation environment. This fix was kept, but it does not
+    explain the stop-distance symptom, which persisted after it was
+    applied.
   \item \textbf{Command-delivery delay.} Measured directly on the
     QCar's own local clock (eliminating any network-latency
     contribution) at approximately \SI{0.2}{\second} from decision to
@@ -120,72 +131,23 @@ and why it must not be blindly re-attempted.
 # retuning BRAKE_GAIN alone will not fix it.
 \end{lstlisting}
 
-\paragraph{A minimal model of why this design cannot be stable.}
-The instability the comment above describes can be shown formally
-with a deliberately simplified discrete-time model that keeps only
-the mechanism responsible, not the full nonlinear vehicle dynamics.
-Let $v_k$ be the residual measured velocity at control cycle $k$.
-Let the brake law command a throttle proportional to that residual
-with gain $K$: $u_k = -K v_k$. If the vehicle's velocity responds to
-one cycle's throttle command with an effective per-cycle gain $a$
-(lumping motor response, control period and vehicle mass into a
-single constant and ignoring natural friction/drag for this minimal
-model), the resulting closed-loop update is
-
-\begin{equation}
-  v_{k+1} = v_k + a\,u_k = v_k(1 - aK).
-  \label{eq:brake-instability}
-\end{equation}
-
-This is a first-order linear recurrence. Its behaviour is
-governed entirely by the magnitude of $(1 - aK)$. The residual
-velocity decays toward zero only if $|1 - aK| < 1$, i.e.\
-$0 < aK < 2$; it oscillates in sign every cycle if $aK > 1$.
-Critically, that oscillation \emph{grows} in magnitude, without
-bound, whenever $aK > 2$, since each successive $v_k$ is then
-multiplied by a factor more negative than $-1$. This single
-inequality is the formal statement of exactly what the source comment
-describes qualitatively: a correction that overshoots past zero into
-real reverse motion, prompting a next-cycle correction in the
-opposite direction that itself overshoots by more. It also shows
-directly why \emph{no} amount of retuning $K$ alone guarantees safety
-here. $a$, the vehicle's true, real per-cycle response to a given
-throttle command, was never independently measured before this
-control law was deployed, so there was no way to have verified
-$aK < 2$ in advance from the gain value alone.
-
-A one-shot design avoids re-arming after the first correction, but
-Equation~\ref{eq:brake-instability}'s single-step overshoot condition
-does not require re-arming to manifest. If the very first correction
-alone satisfies $aK > 2$, it already produces a reverse velocity
-larger in magnitude than the original residual it was meant to
-cancel. This is consistent with the one-shot retest reproducing the
-same oscillation, rather than being protected by its disarm
-condition. It is precisely the kind
-of hand-traceable instability check Section~\ref{sec:methodology-overview}'s
-standing rule asks for \emph{before} hardware deployment, not after.
-
-A revised, ``one-shot'' design was implemented: braking fires exactly
+A revised, ``one-shot'' design was tried next: braking fires exactly
 once per drive-to-stop transition and permanently disarms the
 instant measured velocity crosses zero, rather than re-arming from
 residual drift. It \textbf{reproduced the same oscillation on
-retest}. Given the repeated safety failure, this control approach was
-abandoned entirely rather than iterated on further. Both modified
-files were reverted to their exact pre-investigation state, verified
-byte-identical to the known-good version by hash comparison. The
-failure was documented directly in a source-code comment so that it
-is not blindly re-attempted in a future session.
+retest}, since disarming after one shot does not help when that
+first shot is itself already large enough to overshoot into the
+opposite direction. Given the repeated safety failure, this control
+approach was abandoned entirely rather than iterated on further.
+Both modified files were reverted to their original state.
 
 This incident is the clearest instance in this project of the general
-principle stated in Section~\ref{sec:methodology-overview}. A
-reactive feedback controller acting on a live sensor reading, on a
-system already confirmed to have real actuator lag and inertia,
-should be traced through by hand for an overshoot scenario or tested
-in simulation first, before it is ever sent to physical hardware.
-``The control theory seems sound'' was not, on its own,
-sufficient justification here. This project treats that as a
-standing rule for any future reactive control logic on this
-platform, not merely a lesson learned in retrospect.
+principle stated in Section~\ref{sec:methodology-overview}: a
+reactive feedback controller acting on a live sensor reading should
+be traced through by hand for an overshoot scenario, or tested in
+simulation, before it is ever sent to QCar. ``The
+control theory seems sound'' was not, on its own, sufficient
+justification here.
 
 \section{Sim-versus-Real Comparison}
 \label{sec:sim-vs-real}
@@ -202,9 +164,7 @@ A six-point sweep across three target distances
 (\SIlist{0.20;0.25;0.30}{\meter\per\second}) found real
 hardware overshoot in the range \SIrange{0.58}{2.12}{\meter} across
 two sessions roughly one hour apart. \emph{Every} tested condition
-was worse in the second session, by a broadly consistent margin. This
-is evidence of real, reproducible drift, plausibly battery voltage or
-floor/tyre condition, rather than measurement noise.
+was worse in the second session, by a broadly consistent margin.
 
 The matched simulation sweep, over the same six conditions, showed
 overshoot of only \SIrange{0.044}{0.067}{\meter} --
@@ -262,63 +222,25 @@ than a friction effect. \SIlist{0.20;0.15}{\meter\per\second}
 \SIrange{8}{10}{\second} of commanding.
 
 This second behaviour is zero motion regardless of how long the duty
-is held. It is a genuine, independent physical deadband property of
-the vehicle, not a linear gain error. It interacts badly with a
-naive linear-gain correction: the lowered gain restored accurate
-cruise-speed tracking at higher commanded speeds, but pushed the
-duty cycle for normal teleoperation speeds below the deadband
-threshold entirely, making the vehicle stop responding to real
-driving commands. The gain correction was reverted
-the same day to restore usable teleoperation.
+is held. It is two distinct effects, not one. The multi-second delay
+before breakaway is not friction at all: Section~\ref{sec:readmode-bug}
+traces it to a buffered sensor read in the QCar HAL rather than the
+drivetrain. Separately, static friction (stiction) resists the onset
+of motion up to a breakaway force, a genuine zero/non-zero threshold
+distinct from the simulation's Coulomb tyre-ground friction
+(Section~\ref{sec:friction-theory}) and still present after every fix
+in this chapter (Section~\ref{sec:readmode-validation}). This
+threshold interacts badly with a naive linear-gain correction. The
+lowered gain restored accurate cruise-speed tracking at higher
+commanded speeds, but it also pushed the duty cycle for normal
+teleoperation speeds below the deadband threshold entirely, making
+the vehicle stop responding to real driving commands. This correction
+was reverted the same day to restore usable teleoperation.
 
-\paragraph{This is a different friction phenomenon from Section~\ref{sec:friction-theory}'s -- and, in part, not friction at all.}
-It is worth being precise about which effects are actually responsible
-here, since this thesis initially conflated two genuinely distinct
-physical phenomena with a third, unrelated software artefact, all
-under similar friction-flavoured language. Section~\ref{sec:friction-theory}'s
-Coulomb tyre-ground friction (the simulation's \texttt{mu1}/\texttt{mu2})
-governs whether a spinning wheel's rotation converts into forward
-chassis thrust at all and is essentially instantaneous. It has no
-notion of a wheel being ``stuck'' and is unrelated to everything
-below. The deadband characterised here is a different phenomenon
-internal to the real drivetrain itself (motor brushes, gearbox mesh,
-bearing seats): \emph{static} friction (often called stiction) resists
-the onset of relative motion between two surfaces up to some breakaway
-force threshold, while \emph{kinetic} friction, which applies once
-motion has actually begun, is often measurably lower than that static
-threshold for the same surface pair. A commanded duty cycle below the
-static threshold produces zero motion no matter how long it is held,
-since the applied torque never exceeds the force needed to break
-static friction in the first place. This zero/non-zero threshold is
-genuinely real and remains present after every fix in this chapter
-(Section~\ref{sec:readmode-validation}).
-
-What is \emph{not} a friction effect, despite initially being
-described as one here, is the multi-second delay observed
-\emph{before} that breakaway. Section~\ref{sec:readmode-bug} shows
-this $\approx$\SI{2}{\second} figure is fixed regardless of duty,
-speed, or how much torque is applied, something a genuine
-breakaway-force process would not produce. It traces the delay
-instead to a buffered sensor read in the vendor HAL.
-
-Once duty is raised past the real static threshold, the \emph{lower}
-kinetic friction then applies to an already-moving system, so the
-same duty cycle that only barely broke static friction can
-accelerate substantially further than expected once moving. This
-asymmetry, unlike the delay, is a genuine, still-valid physical
-effect. It is the stick-slip signature Section~\ref{sec:final-calibration}
-identifies directly in the duty-sweep data. Table~\ref{tab:duty-sweep}'s
-\texttt{0.085} row \emph{runs away} to a sustained higher
-cruise speed rather than settling, a continuing behavioural
-difference rather than a one-off timing offset.
-
-This reframes the calibration problem: gain and deadband are not
-independent. Any solution must jointly (a) track commanded speed
-accurately at normal operating speeds and (b) keep every one of
-those same commands above the static-friction threshold. A single
-linear multiplier applied to the whole range cannot do both: scaling
-the gain down to fix (a) simultaneously worsens (b), for exactly the
-commands that were already only barely clearing the threshold.
+Gain and deadband are not independent as a result. A single linear
+multiplier applied to the whole range cannot fix both, since scaling
+the gain down to fix one simultaneously worsens the other for
+commands already only barely clearing the threshold.
 
 \subsection{Final Calibration via an Empirical Duty Sweep}
 \label{sec:final-calibration}
@@ -423,32 +345,6 @@ sub-\SI{0.25}{\meter\per\second} creep would require closed-loop
 velocity feedback from the encoder, rather than a fixed duty
 mapping.
 
-\subsection{A Stray-Process False Positive}
-\label{sec:stray-process}
-
-While iterating on this calibration, a separate, purely diagnostic
-false alarm is worth recording as a general debugging caution. A
-prior \texttt{check\_stop\_latency.py} test process, left running in
-the background rather than exiting automatically once its measurement
-completed, continued publishing \texttt{linear.x=0.0} on
-\texttt{/cmd\_vel} at 20\,Hz, silently racing against a separately
-launched teleoperation node publishing on the same topic. The
-resulting symptom was the vehicle briefly registering a throttle
-command and then immediately reverting to zero within one control
-cycle. It looked exactly like a gain, deadband, or logic bug and was
-initially investigated as one. ROS~2 does not warn about multiple
-publishers on the same topic; it simply interleaves messages, with
-whichever publisher's message arrives last in a given control cycle
-taking effect. The actual fix was operational, not code: kill the
-stray process. This project subsequently adopted two standing
-practices as a result: checking \texttt{pgrep -af} for
-topic-related script names (or \texttt{ros2 topic info /cmd\_vel
---verbose} for publisher count) before deep-diving into a
-control-logic theory whenever real behaviour contradicts an issued
-command; and designing one-shot diagnostic nodes to exit
-automatically once their measurement is complete, rather than
-spinning indefinitely.
-
 \section{The Hardware Abstraction-Layer Buffering Defect}
 \label{sec:readmode-bug}
 
@@ -458,101 +354,54 @@ distance. Even after the throttle calibration of
 Section~\ref{sec:final-calibration} made commanded and real cruise
 speed match closely, that symptom was still present, apparently
 unaffected by the gain fix. This section documents how that residual
-was ultimately traced to a defect in the vendor hardware abstraction
-layer itself, not the vehicle's physical dynamics at all. This is
-the project's single most significant finding, both for its
-magnitude and for the methodological lesson in how long an incorrect
-physical explanation can survive against evidence that, in
-hindsight, directly contradicted it.
+was ultimately traced to a defect in the QCar hardware abstraction
+layer itself, not the vehicle's physical dynamics at all.
 
-\subsection{An Initial, Incomplete Diagnosis}
+\subsection{Diagnosing the Root Cause}
 \label{sec:coast-shape-analysis}
 
-A closer look at the raw coast-phase velocity trace from one of the
-calibration validation runs (\SI{0.5}{\meter\per\second}) showed the
-coast was \emph{not} a smooth decay. Velocity remained essentially
-flat, if anything slightly \emph{elevated} relative to the preceding
-cruise average, for the first $\approx$\SI{2.0}{\second} after
-``stop'' was commanded. It then crashed sharply to zero in the final
-\SIrange{0.3}{0.4}{\second}. This flat-plateau-then-cliff shape
-is inconsistent with passive drivetrain momentum/friction coasting
-(which predicts continuous, gradual decay starting immediately once
-power is cut) and instead resembles the real motor continuing to be
-\emph{actively driven} for roughly two seconds after the stop command
-was issued. A review of the Quanser HAL documentation
-\cite{quanser2023qcar} found no
-mention of any drive-motor ramp, filter, or time constant that would
-explain a two-second lag of this kind -- only a separate, documented
-\SI{0.16}{\second} steering-servo time constant, unrelated to the
-drive motor. This shifted the leading hypothesis toward a
-command-delivery lag in the project's own bridge software, rather
-than physical coasting. This was a genuine change of theory,
-captured here because it turned out to still be one step short of
-the actual cause. A
-diagnostic instrumentation pass (logging commanded velocity, the
-bridge's own internally-ramped throttle value and real encoder
-velocity together, all on the QCar's local clock to eliminate network
-timing) was begun but interrupted by the test vehicle's battery
-running out mid-session and resumed in a later session on a charged
-battery.
+A closer look at the raw coast-phase velocity trace showed the coast
+was \emph{not} a smooth decay: velocity stayed essentially flat for
+the first $\approx$\SI{2.0}{\second} after ``stop'' was commanded,
+then crashed to zero within \SIrange{0.3}{0.4}{\second}. This
+flat-plateau-then-cliff shape is inconsistent with passive drivetrain
+coasting, which predicts a gradual decay from the moment power is
+cut. It instead resembles the motor being actively driven for
+roughly two seconds after the stop command. This shifted the leading
+hypothesis toward a command-delivery lag in the project's own bridge
+software rather than physical coasting -- a genuine change of theory,
+though it turned out to still be one step short of the actual cause.
 
-\subsection{Disproving Two Hypotheses and the Argument That Found the Real Cause}
-\label{sec:readmode-discovery}
-
-The resumed diagnostic trace showed the bridge's own internal
-throttle value reaching exactly zero within \SI{52}{\milli\second} of
-the stop command, while the encoder-reported velocity stayed elevated
-for roughly two more seconds. This correctly ruled out the project's
-own throttle-ramping logic as the cause. As understood in hindsight,
-though, it did \emph{not} actually rule out a measurement or
-reporting defect in the encoder-velocity reading itself, since the
-two values are produced through entirely separate code paths. This
-distinction was missed on the first pass through the data.
-
-At this point the person operating the vehicle directly and
-repeatedly disputed the emerging conclusion. Teleoperating the QCar
-from a genuine standstill, the vehicle visibly starts and stops moving
-\emph{instantly} in response to a command. This flatly contradicts the
-$\approx$2-second delay the automated test script was measuring. Two
-further hypotheses were tested and disproven with direct hardware data
-before the actual cause was found:
-
-\begin{itemize}
-  \item \textbf{Duty-magnitude dependence} (a higher commanded speed
-    produces more torque and a faster breakaway): tested at
-    \SI{0.7}{\meter\per\second} (duty 0.087, well above the normally
-    tested \SIrange{0.052}{0.075} range) -- the start-up delay was
-    still \SI{2.092}{\second}, statistically identical to the
-    low-speed tests. Disproven.
-  \item \textbf{``\texttt{v} is a stale reading, not real motion.''}
-    Disproven by the structure of the \texttt{Odometry} class's own
-    update code. The reported velocity \texttt{v} and the accumulated
-    position \texttt{x} are computed from the exact same
-    \texttt{distance} variable within the same loop iteration. If
-    \texttt{v} were falsely indicating motion, the accumulated position
-    would have to freeze at the same instant. It demonstrably did
-    not: distance kept growing smoothly and matched the vehicle's real,
-    physically measured settled position.
-\end{itemize}
+A diagnostic trace showed the bridge's own internal throttle value
+reached exactly zero within \SI{52}{\milli\second} of the stop
+command, ruling out the project's own throttle-ramping logic. This
+did not, however, rule out a defect in the encoder-velocity reading
+itself, since the two values are produced through separate code
+paths -- a distinction missed on the first pass. Two further
+hypotheses were tested and disproven directly on hardware. A higher
+commanded speed producing a faster breakaway was ruled out: the
+delay was statistically identical at \SI{0.7}{\meter\per\second}.
+The possibility that the reported velocity was a stale reading
+rather than real motion was ruled out too: the \texttt{Odometry}
+class's reported velocity and accumulated position come from the
+same variable in the same loop iteration, so a false velocity
+reading would have frozen the position too, which it demonstrably
+did not.
 
 The argument that ultimately identified the true cause was not a
 further measurement, but a piece of physical reasoning I raised
-directly: \emph{an encoder is a real-time
-sensor -- it cannot have a built-in two-second lag by itself.} This
-was correct. It redirected the investigation to a question the
-prior analysis had not actually asked: not whether the
+directly: \emph{an encoder is a real-time sensor -- it cannot have a
+built-in two-second lag by itself.} This redirected the investigation
+toward a question the prior analysis had not asked: not whether the
 \texttt{Odometry} class was internally self-consistent (it was), but
-whether the value it was consuming as its own input, the raw
-\texttt{car.motorEncoder[0]} read, was itself stale before the
-\texttt{Odometry} class ever saw it. This prompted reading the vendor
-HAL's own Python source directly, rather than continuing to reason
-about it indirectly from documentation or from the \texttt{Odometry}
-class's own behaviour.
+whether the raw encoder read it consumed as input was itself stale
+before the \texttt{Odometry} class ever saw it, prompting a direct
+read of the QCar HAL's own Python source.
 
 \subsection{The Root Cause, a Ring-Buffer I/O Mode}
 \label{sec:readmode-rootcause}
 
-The root cause, found in the vendor HAL source
+The root cause, found in the QCar HAL source
 (\texttt{pal/products/qcar.py}) on the QCar itself, is exactly the
 \texttt{readMode} distinction introduced in
 Section~\ref{sec:qcar-platform}. \texttt{qcar\_bridge.py} constructed
@@ -569,43 +418,26 @@ process starts, the buffer fills and cycles during that idle gap.
 Once reads begin at a consumption rate matching the production rate
 exactly, the read stream is permanently stuck approximately 100
 samples (\SI{2.0}{\second}) behind real time, because the backlog
-never has an opportunity to drain.
+never has an opportunity to drain. My own reading of this design is
+that \texttt{readMode=1} exists mainly as a debugging convenience
+within the QCar HAL: a background task a developer can poll without
+managing acquisition timing directly. It does not read like a mode
+meant for a real-time control loop such as this project's bridge.
 
-\paragraph{Formalising the lag: why it is exactly the buffer depth, forever.}
-Figure~\ref{fig:ringbuffer-lag} illustrates the mechanism derived
-below. Let the background task write into the ring buffer at a fixed
-production index $p$, incrementing by one every $1/f$ seconds
-($f = \SI{50}{\hertz}$ here). Let \texttt{car.read()} calls
-advance a separate consumption index $c$, each call returning the
-sample at position $c \bmod B$ (buffer capacity $B = 100$) and then
-incrementing $c$. Production begins at object construction, $t = 0$;
-consumption begins only once a relay client connects, at
-$t = T_{\text{idle}}$. During $[0, T_{\text{idle}}]$, $p$ advances
-alone (production with no consumption at all), so by the time
-consumption starts, $p = f \cdot T_{\text{idle}}$ while $c = 0$.
-This is a gap of $f \cdot T_{\text{idle}}$ samples between them. If
-$T_{\text{idle}} > B/f$ (true here, since a relay connecting takes
-several seconds while $B/f = \SI{2.0}{\second}$), the overwrite-on-overflow
-buffer has already wrapped around at least once by
-$T_{\text{idle}}$. This means the oldest sample still available to
-read is not the very first one produced, but the one produced exactly
-$B$ samples before $p$'s current value. The very first
-\texttt{car.read()} call, at $t = T_{\text{idle}}$, therefore
-necessarily returns a sample captured at $t = T_{\text{idle}} - B/f$, a lag of
-exactly $B/f = \SI{2.0}{\second}$, regardless of how much larger than
-$B/f$ the idle gap $T_{\text{idle}}$ itself was. Production and
-consumption both advance at the identical rate $f$ from that point
-onward (one \texttt{car.read()} per control-loop cycle, matching the
-background task's own sampling rate). Because of that, the gap
-between $p$ and $c$ (and therefore the lag between ``now'' and
-whatever sample is being read) stays fixed at exactly $B$ samples
-indefinitely. Neither index ever gains on the other, so the backlog
-that accumulated during the idle gap is carried forward forever
-rather than draining over time. This is precisely why the lag proved
-so exactly reproducible (always $B/f = \SI{2.0}{\second}$, never more
-and never less, regardless of how long the QCar sat idle before a
-relay connected) and why it never improved on its own the longer the
-system ran.
+\paragraph{Why the lag is exactly the buffer depth, forever.}
+Figure~\ref{fig:ringbuffer-lag} illustrates the mechanism: a
+production index $p$ (the background task, running from object
+construction) and a consumption index $c$ (\texttt{car.read()}
+calls, starting only once a relay connects) both advance at the same
+rate once reading begins. Because the idle gap before that first
+read is longer than the buffer's \SI{2.0}{\second} capacity, the
+buffer has already wrapped around at least once, so the first read
+returns a sample that is already one full buffer-depth stale. Since
+$p$ and $c$ then advance together at the same rate, that gap never
+closes: every subsequent read stays exactly \SI{2.0}{\second} behind
+real time, indefinitely, regardless of how long the idle gap itself
+was. This is precisely why the lag proved so exactly reproducible
+and why it never improved on its own the longer the system ran.
 
 \begin{figure}[htbp]
   \centering
@@ -641,15 +473,16 @@ system ran.
   \label{fig:ringbuffer-lag}
 \end{figure}
 
-This single mechanism explains every property of the symptom observed
-across this entire chapter: the near-exact \SI{2.0}{\second} to
-\SI{2.1}{\second} figure (matching the buffer's mathematically exact
-2.0\,s capacity), its remarkable stability across sessions, vehicle
-speeds and physical conditions (a fixed buffer depth is indifferent
-to any of these) and its symmetric appearance on both the start side
-(the start-up delay of Section~\ref{sec:deadband-discovery}) and the
-stop side (the ``coast''), since both are read through the same
-buffered path.
+This single mechanism explains every property of the symptom
+observed across this entire chapter. The near-exact
+\SI{2.0}{\second} to \SI{2.1}{\second} figure matches the buffer's
+mathematically exact 2.0\,s capacity. Its stability across sessions,
+vehicle speeds and physical conditions follows directly, since a
+fixed buffer depth is indifferent to any of these. The symmetric
+appearance on both the start side (the start-up delay of
+Section~\ref{sec:deadband-discovery}) and the stop side (the
+``coast'') is explained the same way, since both are read through
+the same buffered path.
 
 \textbf{Fix:} \texttt{qcar\_bridge.py} now constructs the \texttt{QCar}
 object as shown in Listing~\ref{lst:readmode-fix} -- immediate I/O,
@@ -657,16 +490,6 @@ reading current hardware state directly with no background task or
 buffer involved at all.
 
 \begin{lstlisting}[language=Python,caption={The one-line HAL construction change that fixed the buffering defect (\texttt{qcar\_bridge.py}).},label={lst:readmode-fix}]
-# readMode=0 (immediate I/O) - was 1 (task-based I/O), which runs a
-# background acquisition task into a 100-sample ring buffer
-# (frequency*2) from the moment this object is constructed,
-# independent of when car.read() actually starts being called. Since
-# this object is created before the listening socket even opens, and
-# car.read() isn't called until a relay connects, the buffer fills and
-# starts overwriting during that gap - once reads begin at the matched
-# 50Hz rate, they get permanently stuck ~100 samples (~2.0s) behind
-# real-time, since the backlog never drains. Immediate I/O reads
-# current hardware state directly, no task/buffer involved.
 car = QCar(readMode=0, frequency=READ_RATE)
 \end{lstlisting}
 
@@ -677,24 +500,39 @@ The full calibration test suite from Section~\ref{sec:final-calibration}
 was re-run in its entirety on a freshly charged battery, with the
 duty formula (Equation~\ref{eq:throttle-calibration}) unchanged, to
 isolate the effect of this single fix. Table~\ref{tab:readmode-fix}
-presents the results.
+presents the results. It also carries, for every condition where a
+defensible original figure exists, the extra distance the vehicle
+would have travelled under the original, uncalibrated
+\texttt{THROTTLE\_GAIN}, so the table shows all three stages this
+project's investigation actually went through: the original symptom,
+the improvement from throttle calibration alone and the final result
+once the \texttt{readMode} defect was also fixed.
 
 \begin{table}[htbp]
   \centering
-  \caption{Effect of the \texttt{readMode=0} fix on start-up delay, extra distance and stop latency.}
+  \caption{Effect of the \texttt{readMode=0} fix on start-up delay, extra distance and stop latency, throttle calibration already applied throughout unless noted.}
   \label{tab:readmode-fix}
   \begin{tabular}{@{}lccc@{}}
     \toprule
     Test & Start-up delay & Extra distance & Stop latency \\
-    & (before $\to$ after) & (before $\to$ after) & (before $\to$ after) \\
+    & (before $\to$ after) & (original $\to$ before $\to$ after) & (before $\to$ after) \\
     \midrule
-    \SI{2}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.09}{0.117}{\second} & \SIrange{0.520}{0.114}{\meter} & \SIrange{2.37}{0.598}{\second} \\
-    \SI{2}{\meter} @ \SI{0.4}{\meter\per\second} & \SIrange{2.14}{0.001}{\second} & \SIrange{0.790}{0.114}{\meter} & \SIrange{2.40}{0.501}{\second} \\
-    \SI{2}{\meter} @ \SI{0.5}{\meter\per\second} & \SIrange{2.14}{0.116}{\second} & \SIrange{0.923}{0.154}{\meter} & \SIrange{2.55}{0.550}{\second} \\
-    \SI{1}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.14}{0.120}{\second} & \SIrange{0.641}{0.118}{\meter} & \SIrange{2.44}{0.572}{\second} \\
-    \SI{3}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.08}{0.088}{\second} & \SIrange{0.583}{0.104}{\meter} & \SIrange{2.35}{0.509}{\second} \\
+    \SI{2}{\meter} @ \SI{0.2}{\meter\per\second} & \SI{2.21}{\second} $\to$ DNT & \SI{0.95}{\meter} (\SI{0.40}{\meter\per\second})\textsuperscript{*} $\to$ DNT $\to$ DNT & \SI{2.31}{\second} $\to$ DNT \\
+    \SI{2}{\meter} @ \SI{0.3}{\meter\per\second} & \SI{2.09}{\second} $\to$ \SI{0.117}{\second} & \SI{1.72}{\meter} (\SI{0.72}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.520}{\meter} $\to$ \SI{0.114}{\meter} & \SI{2.37}{\second} $\to$ \SI{0.598}{\second} \\
+    \SI{2}{\meter} @ \SI{0.4}{\meter\per\second} & \SI{2.14}{\second} $\to$ \SI{0.001}{\second} & \SI{2.42}{\meter} (\SI{1.02}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.790}{\meter} $\to$ \SI{0.114}{\meter} & \SI{2.40}{\second} $\to$ \SI{0.501}{\second} \\
+    \SI{2}{\meter} @ \SI{0.5}{\meter\per\second} & \SI{2.14}{\second} $\to$ \SI{0.116}{\second} & DNT $\to$ \SI{0.923}{\meter} $\to$ \SI{0.154}{\meter} & \SI{2.55}{\second} $\to$ \SI{0.550}{\second} \\
+    \SI{1}{\meter} @ \SI{0.3}{\meter\per\second} & \SI{2.14}{\second} $\to$ \SI{0.120}{\second} & \SI{1.80}{\meter} (\SI{0.76}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.641}{\meter} $\to$ \SI{0.118}{\meter} & \SI{2.44}{\second} $\to$ \SI{0.572}{\second} \\
+    \SI{3}{\meter} @ \SI{0.3}{\meter\per\second} & \SI{2.08}{\second} $\to$ \SI{0.088}{\second} & \SI{1.99}{\meter} (\SI{0.84}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.583}{\meter} $\to$ \SI{0.104}{\meter} & \SI{2.35}{\second} $\to$ \SI{0.509}{\second} \\
     \bottomrule
   \end{tabular}
+
+  \vspace{2pt}
+  \raggedright\footnotesize\textsuperscript{*}Distance travelled at
+  this speed before calibration (actual speed shown in brackets).
+  DNT = did not test: \SI{2}{\meter}~@~\SI{0.5}{\meter\per\second}
+  was not tested before calibration. \SI{2}{\meter}~@~\SI{0.2}{\meter\per\second}
+  was not tested after calibration, since the robot will not move
+  at that speed once recalibrated.
 \end{table}
 
 Start-up delay collapses to \SIrange{0.001}{0.12}{\second} -- an
@@ -705,11 +543,16 @@ or target distance, rather than scaling with cruise speed as
 previously found. This confirms that the earlier ``extra distance
 scales with speed'' relationship was itself an artefact of a
 fixed-\emph{duration} buffering delay applied to different real
-velocities, not a genuine vehicle property.
+velocities, not a genuine vehicle property. Taken together with the
+original, uncalibrated figure from Section~\ref{sec:sim-vs-real}'s
+isolated comparison, the \SI{2}{\meter}~@~\SI{0.3}{\meter\per\second}
+condition's extra distance fell from \SI{1.90}{\meter} to
+\SI{0.114}{\meter} across both fixes combined, a reduction of
+roughly 94\%.
 
 Both the extra-distance and stop-latency figures in
 Table~\ref{tab:readmode-fix} are encoder-derived, from wheel rotation
-counts via \texttt{/odom}, as Section~\ref{sec:readmode-discovery}
+counts via \texttt{/odom}, as Section~\ref{sec:coast-shape-analysis}
 establishes. At each of the tested distances, the encoder-reported
 travel was independently cross-checked against tape-measured floor
 markings and manual stopwatch timing of the commanded-stop-to-physical-stop
@@ -723,18 +566,238 @@ mystery. Dividing extra distance by stop latency, an implied average
 coast velocity, yields \SIrange{54}{61}{\percent} of cruise velocity
 in four of the five tests. This is consistent with an ordinary,
 roughly linear velocity decay to zero over the stop-latency window (a
-perfectly linear decay predicts exactly 50\%). The one outlier
-(\SI{2}{\meter} @ \SI{0.3}{\meter\per\second}, 108\%) is attributable
-to a data-analysis artefact (the ``cruise average'' window for that
-specific test likely had not reached a true steady state, now that
-the run has much less runway once start-up delay is near-instant)
-rather than a physical inconsistency.
+perfectly linear decay predicts exactly 50\%). The residual overshoot
+after both fixes is ordinary physical coasting, not a further hidden
+defect.
 
-\SI{0.2}{\meter\per\second} remains genuinely unreliable even after
-this fix, sometimes failing to move the vehicle at all. This is the
-real, independent static-friction deadband characterised in
-Section~\ref{sec:deadband-discovery} and is unrelated to the
-buffering defect resolved here.
+\section{Steering-Trim Calibration}
+\label{sec:steering-trim}
+
+A small but consistent steering bias was present on this specific
+chassis: the vehicle drifted laterally under a nominally straight,
+zero-steering command. The physical steering linkage
+could not be adjusted to correct it mechanically. The fix was
+implemented in software instead, as a constant offset
+(\texttt{STEERING\_TRIM}, an early estimate of \SI{-0.08}{\radian},
+later refined to \SI{-0.087}{\radian} in
+Section~\ref{sec:steering-gain} below) applied only at the point the
+steering command is written to the servo. Calibration proceeded in
+two stages: an initial static test (motor off, holding candidate
+angles and judging visually against a reference, preserved as
+\texttt{calibrate\_steering.py} for future re-calibration) narrowed
+the value to roughly the right range. A series of real
+straight-line driving tests (drive a known distance, measure the
+resulting lateral offset, compute
+$\delta_{\text{trim}} = \arctan(\text{offset}/\text{distance})$)
+refined it further. This data carried real measurement noise. Lateral offset depends on
+the vehicle's initial aim at the start of each test run, not purely
+on trim, so the calibration deliberately did not over-fit a precise
+value from only two data points. A
+consistent directional nudge toward zero observed drift converged
+faster in practice than attempting a precise interpolation.
+
+This first-pass value was accepted once a \SI{4.4}{\meter} test drive
+showed no reported drift. It is described as ``almost accurate,'' a
+deliberate acceptance of a small residual rather than a claim of
+exact zero. As the next section shows, it was in fact only half of
+the real correction this vehicle needed.
+
+\subsection{Steering Gain as a Second, Independent Nonlinearity}
+\label{sec:steering-gain}
+
+The trim calibration above corrects only the steering command's
+\emph{offset} -- what the vehicle does at a commanded angle of zero.
+It says nothing about whether a nonzero commanded angle produces the
+correct amount of real wheel deflection. For a long period of
+this project nobody had verified that separately. The gap surfaced
+directly during Nav2 integration (Chapter~\ref{ch:nav-integration}):
+I reported that autonomous navigation on real
+hardware was ``not turning as well as sim,'' a complaint that a pure
+offset error cannot explain, since an offset only shifts the
+zero-point and leaves proportionality untouched.
+
+\paragraph{Steering-gain test.} With a fresh battery fitted and
+the test speed raised to \SI{0.4}{\meter\per\second}, confirmed via
+logged velocity to sit safely above the stiction floor, a seven-point
+sweep of commanded steering angles was driven, each a fresh
+\SI{1}{\meter} arc from a consistent physical start pose.
+\texttt{STEERING\_TRIM} was held at zero throughout, so the commanded
+value was exactly what reached \texttt{car.write()}. The real wheel angle implied by
+each measured lateral deviation was back-solved from the same
+circular-arc geometry as the trim calibration above
+($R = L/\tan\delta$, $y = R(1-\cos(s/R))$, wheelbase
+$L=\SI{0.25725}{\meter}$), using bisection rather than a closed-form
+inverse since the forward relationship is transcendental in $\delta$.
+Table~\ref{tab:steering-gain-sweep} presents the results.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Commanded steering angle versus implied real wheel angle (\texttt{STEERING\_TRIM}=0).}
+  \label{tab:steering-gain-sweep}
+  \begin{tabular}{@{}cc@{}}
+    \toprule
+    Commanded angle (rad) & Implied real angle (rad) \\
+    \midrule
+    $0.00$ & $+0.112$ \\
+    $-0.05$ & $+0.052$ \\
+    $-0.08$ & $+0.018$ \\
+    $-0.085$ & $+0.005$ \\
+    $-0.09$ & $0.000$ \\
+    $-0.10$ & $-0.021$ \\
+    $-0.12$ & $-0.062$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        width=0.75\textwidth, height=6.5cm,
+        xlabel={Commanded steering angle $\delta_{\text{cmd}}$ (rad)},
+        ylabel={Implied real wheel angle (rad)},
+        grid=major, grid style={gray!25},
+        legend pos=north west, legend style={font=\small},
+        label style={font=\small}, tick label style={font=\small}
+      ]
+      \addplot[only marks, mark=*, mark size=2pt, color=black]
+        coordinates {(0.00,0.112) (-0.05,0.052) (-0.08,0.018)
+          (-0.085,0.005) (-0.09,0.000) (-0.10,-0.021) (-0.12,-0.062)};
+      \addlegendentry{Measured (seven-point sweep)}
+      \addplot[domain=-0.13:0.01, samples=2, thick, color=gray]
+        {1.39*x + 0.119};
+      \addlegendentry{Fit: $\delta_{\text{real}}=1.39\,\delta_{\text{cmd}}+0.119$, $R^2=0.977$}
+      \addplot[domain=-0.13:0.01, samples=2, dashed, color=gray!60]
+        {1.00*x};
+      \addlegendentry{1:1 (no gain error)}
+    \end{axis}
+  \end{tikzpicture}
+  \caption[Commanded vs.\ implied real steering angle]{Commanded versus implied real steering angle
+    (Table~\ref{tab:steering-gain-sweep}), with the fitted regression
+    line against the 1:1 relationship a gain-free kinematic model
+    would predict. The fitted slope of 1.39 is the multiplicative gain
+    error itself; the vertical offset between the two lines at
+    $\delta_{\text{cmd}}=0$ separately reflects the zero-point trim
+    before it was corrected.}
+  \label{fig:steering-gain-fit}
+\end{figure}
+
+The relationship is clean, monotonic and shows no sign flips or
+stalls. A least-squares linear fit,
+$\delta_{\text{real}} = m \, \delta_{\text{cmd}} + c$, gives
+$m = 1.39$, $c = \SI{0.119}{\radian}$, $R^2 = 0.977$ (the two
+largest-magnitude commands sit slightly above the fitted line, a mild
+hint of additional curvature at large angles not investigated
+further). Two conclusions follow directly. The true zero-point
+trim is $\delta_{\text{cmd}} = -0.09$, not the $-0.08$ found by the
+coarser static test above, pinned by direct interpolation between
+the $-0.085$ (implied $+0.005$) and $-0.09$ (implied $0.000$) rows.
+Independently of the trim value entirely, the real wheel
+also turns approximately 39\% \emph{further} than the kinematic model's
+commanded angle implies for any non-zero command. This is a genuine
+multiplicative gain error, not an offset and one that a pure trim
+correction cannot fix. This gain error is a strong candidate explanation for the
+original complaint that motivated the investigation. Nav2's planner
+and MPPI controller both assume the kinematic model of
+Section~\ref{sec:true-ackermann} maps 1:1 onto real wheel angle. A
+vehicle that over-rotates by 39\% for every commanded turn would
+visibly overshoot turns and cut corners tighter than planned,
+exactly the symptom reported.
+
+\paragraph{Fix and validation.} A documentation check first confirmed
+that no factory steering calibration exists to consult. The Quanser
+hardware manual \cite{quanser2023qcar} documents only the raw servo
+command range and the physical maximum wheel angle
+(Table~\ref{tab:app-safety-limits}). The HAL's own
+\texttt{steeringBias} construction parameter was confirmed left at
+its default of zero in \texttt{qcar\_bridge.py} -- nothing at the
+firmware level was fighting or duplicating the software correction.
+\texttt{STEERING\_GAIN = 1.39} (Listing~\ref{lst:trim-split}'s
+\texttt{apply\_trim()}, which pre-divides the kinematic angle by this
+constant before adding \texttt{STEERING\_TRIM}) was set directly from
+this regression. The trim itself was then refined further, from three
+repeated trials each at commanded $-0.08$, $-0.085$ and $-0.09$ (to
+average out human placement and measurement noise): the zero-crossing
+of the three averaged measurements gave a final
+\texttt{STEERING\_TRIM = -0.087}. A dedicated validation drive commanded a real kinematic turn of
+\SI{0.15}{\radian} over a \SI{1}{\meter} arc at
+\SI{0.4}{\meter\per\second}, predicting \SI{28.5}{\centi\meter} of
+lateral deflection. The measured deflection was \SI{27}{\centi\meter},
+a residual error of $\approx$5.6\%, down from $\approx$39\% with no
+gain correction at all. The fix was subsequently
+confirmed in genuine closed-loop use. After re-running autonomous
+Nav2 navigation on the physical vehicle post-deployment, my
+direct assessment was that turning behaviour had visibly
+improved. This is consistent with the gain error having been the
+dominant cause of the original complaint rather than merely a
+contributing factor.
+
+As with the throttle calibration constants of
+Section~\ref{sec:final-calibration}, both \texttt{STEERING\_GAIN} and
+\texttt{STEERING\_TRIM} are per-unit values, expected to differ on a
+different physical chassis. The empirical sweep-and-regression
+\emph{method} used to find them is the transferable result, not the
+specific numbers. One operational caution from this investigation is
+also worth recording: testing a previously untested steering-angle
+magnitude can produce more real curvature than expected. Available
+clearance should be confirmed in the new command's actual curve
+direction before testing it, not only in directions already validated
+at smaller magnitudes.
+
+\subsection{A Trim-Placement Bug and the ``Apply at the Actuator Boundary'' Principle}
+\label{sec:trim-boundary-principle}
+
+The first implementation of this trim contained a real bug worth
+recording as a general principle for any per-unit hardware
+calibration constant, not only this one. It folded the trim into the
+\emph{same} steering value used both for the real servo command
+\emph{and} for the odometry dead-reckoning calculation in
+Section~\ref{sec:onboard-bridge-odom}. The entire purpose of
+the trim is to make the real wheels read approximately zero deflection
+despite a nonzero servo command. Feeding that same trimmed value into
+odometry made the dead-reckoning model believe the wheels were
+deflected by the trim amount, even while the vehicle was in reality
+driving dead straight. A live test briefly exposed this directly: a
+straight-line drive of approximately \SI{2.8}{\meter} produced a
+fictitious $y \approx \SI{-1.72}{\meter}$ in the odometry output, a
+spurious $\sim$\ang{30} curve that did not correspond to any real
+vehicle motion.
+
+The fix separated \texttt{compute\_steering()} (returns the
+untrimmed, kinematic steering angle, used for odometry) from a new
+\texttt{apply\_trim()} (computes the real servo command, called only
+immediately before the HAL write), shown together in
+Listing~\ref{lst:trim-split}. \texttt{target\_steering} is
+\texttt{compute\_steering()}'s untrimmed return value. It is also what
+Listing~\ref{lst:odometry-class}'s \texttt{odom.update()} call is
+given. \texttt{apply\_trim()} is invoked only once, at the
+\texttt{car.write()} call site itself.
+
+\begin{lstlisting}[language=Python,caption={The kinematic-steering / servo-trim split (\texttt{qcar\_bridge.py}).},label={lst:trim-split}]
+def compute_steering(linear_x, angular_z):
+    if abs(linear_x) < 1e-2:
+        steer = 0.0
+    else:
+        steer = math.atan(WHEELBASE * angular_z / linear_x)
+    return max(-MAX_STEER_CMD, min(MAX_STEER_CMD, steer))
+
+
+def apply_trim(kinematic_steering):
+    return max(-MAX_STEER_CMD,
+               min(MAX_STEER_CMD,
+                   kinematic_steering / STEERING_GAIN + STEERING_TRIM))
+\end{lstlisting}
+
+Re-verified with the same drive
+command, the odometry then correctly read $y \approx 0$. The general
+principle this illustrates is stated here explicitly, because it is
+expected to generalise to any future per-unit hardware calibration
+constant on this or a similar platform: a calibration constant
+compensating for a specific actuator's physical imperfection should
+be applied \emph{as late as possible, immediately at the actuator
+boundary}. It should never be applied upstream of any computation,
+such as odometry, that treats its input as an accurate, ground-truth
+kinematic quantity.
 
 \section{Summary}
 \label{sec:calibration-summary}
@@ -746,7 +809,7 @@ command-delivery delay and physical drivetrain coasting. It ended
 by identifying two genuinely independent, compounding causes. One
 was an uncalibrated, non-linear throttle-to-speed mapping
 (Section~\ref{sec:throttle-calibration}). The other was a
-fixed-duration sensor-read buffering artefact in the vendor hardware
+fixed-duration sensor-read buffering artefact in the QCar hardware
 abstraction layer (Section~\ref{sec:readmode-bug}) that had, for a
 period of this project, been reasonably but incorrectly attributed
 to genuine vehicle physics.
@@ -754,9 +817,15 @@ to genuine vehicle physics.
 Neither cause was found by reasoning from documentation or first
 principles alone. Both required direct, targeted measurement on the
 physical robot. The second was found only after I raised a direct
-physical argument that prompted reading the vendor's
+physical argument that prompted reading QCar's
 own source code, rather than continuing to trust an internally
 self-consistent, but incompletely verified, software abstraction.
+
+This chapter also calibrated the vehicle's steering
+(Section~\ref{sec:steering-trim}): a constant trim offset and a
+separate, independent multiplicative gain error, the second found
+only once autonomous Nav2 testing exposed a turning-behaviour
+complaint that a pure offset correction could not explain.
 Chapter~\ref{ch:nav-integration} builds on this
 chapter's calibrated, buffering-free bridge to bring up and validate
 full closed-loop Nav2 navigation on the physical vehicle.

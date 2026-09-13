@@ -19,7 +19,7 @@ validation.
 
 The Nav2 parameter set developed and tuned in simulation
 (Chapter~\ref{ch:sim-stack}) required a small, mechanical set of
-changes to run against physical hardware rather than Gazebo: every
+changes to run against QCar rather than Gazebo: every
 occurrence of \texttt{use\_sim\_time} (13 in total, across the
 costmap, planner, controller and AMCL parameter blocks) was switched
 from \texttt{true} to \texttt{false}, since the physical robot has no
@@ -136,8 +136,6 @@ void EarlyCommitCritic::score(CriticData & data)
   if (!enabled_ || data.path.x.shape(0) < 2) { return; }
   utils::setPathFurthestPointIfNotSet(data);
 
-  // Only relevant at the start of a path - once the robot has made
-  // real progress, let the normal path/goal critics take over.
   if (*data.furthest_reached_path_point >= active_path_points_) { return; }
 
   const size_t path_size = data.path.x.shape(0) - 1;
@@ -499,16 +497,14 @@ for (size_t i = 1; i + 1 < n; ++i) {
   const double len2 = std::hypot(d2x, d2y);
   if (len1 < 1e-6 || len2 < 1e-6) { continue; }
   const double dot = (d1x * d2x + d1y * d2y) / (len1 * len2);
-  if (dot < 0.0) { cusp_indices.push_back(i); }  // direction reverses by > 90 deg
+  if (dot < 0.0) { cusp_indices.push_back(i); }
 }
-// Classify each cusp (forward- vs reverse-entering) from `original` only,
-// independent of anything the output-building loop below has written so far.
 for (const size_t cusp_i : cusp_indices) {
   const double cusp_yaw = tf2::getYaw(original[cusp_i].pose.orientation);
   const double dx = original[cusp_i + 1].pose.position.x - original[cusp_i].pose.position.x;
   const double dy = original[cusp_i + 1].pose.position.y - original[cusp_i].pose.position.y;
   const double along = dx * std::cos(cusp_yaw) + dy * std::sin(cusp_yaw);
-  cusps.push_back({cusp_i, along < 0.0, along});  // along < 0 => reverse-entering
+  cusps.push_back({cusp_i, along < 0.0, along});
 }
 \end{lstlisting}
 
@@ -573,10 +569,6 @@ geometry_msgs::msg::PoseStamped ext_pose = original[i];
 ext_pose.pose.position.x = ex;
 ext_pose.pose.position.y = ey;
 output.push_back(ext_pose);
-// The existing straight_distance_ blend (unchanged logic) now runs from
-// (ex, ey) as its origin, not from the original cusp position - the reverse
-// leg must travel back past this pushed-out point to rejoin the downstream
-// curve, giving the controller a margin instead of one exact vertex.
 \end{lstlisting}
 
 With \texttt{extend\_distance} set to \SI{0.15}{\meter} alongside the
@@ -761,8 +753,6 @@ hardware-validated mechanism rather than a replacement with different
 behaviour on straight approaches.
 
 \begin{lstlisting}[language=C++,caption={Continuing the incoming leg's own curvature into the extension, rather than cutting straight (\texttt{cusp\_straightener\_smoother.cpp}).},label={lst:cusp-curvature}]
-// kappa estimated from the incoming leg's own yaw change (dyaw/ds) at the cusp - 0 if the
-// incoming leg was already straight, giving the original straight-line behaviour unchanged.
 constexpr double kExtensionStep = 0.03;
 const int extension_steps = std::max(1, static_cast<int>(std::round(extend_distance_ / kExtensionStep)));
 const double step = extend_distance_ / extension_steps;
@@ -775,11 +765,18 @@ for (int s = 1; s <= extension_steps; ++s) {
     px = cx + radius * (std::sin(cusp_yaw + kappa * arc) - std::sin(cusp_yaw));
     py = cy - radius * (std::cos(cusp_yaw + kappa * arc) - std::cos(cusp_yaw));
   } else {
-    px = cx + std::cos(cusp_yaw) * arc;   // kappa ~ 0: degrades to the straight-line case
+    px = cx + std::cos(cusp_yaw) * arc;
     py = cy + std::sin(cusp_yaw) * arc;
   }
   ext_yaw = cusp_yaw + kappa * arc;
-  // ... each (px, py, ext_yaw) is appended as its own pose, making the arc explicit.
+
+  geometry_msgs::msg::PoseStamped ext_pose = original[i];
+  ext_pose.pose.position.x = px;
+  ext_pose.pose.position.y = py;
+  tf2::Quaternion ext_q;
+  ext_q.setRPY(0, 0, ext_yaw);
+  ext_pose.pose.orientation = tf2::toMsg(ext_q);
+  output.push_back(ext_pose);
 }
 \end{lstlisting}
 

@@ -45,7 +45,7 @@ chapter:
     \SIrange{0.3}{0.5}{\meter\per\second} via an empirical duty sweep.
     A large ($\approx$\SI{2}{\second}) apparent coasting delay was
     ultimately traced not to physical drivetrain dynamics but to a
-    ring-buffer artefact in the vendor hardware abstraction layer's
+    ring-buffer artefact in the QCar hardware abstraction layer's
     task-based I/O mode, reducing start-up delay and stop latency by
     more than an order of magnitude once corrected. Independently,
     a real $\approx$39\% steering-gain error was characterised
@@ -99,7 +99,7 @@ found wanting by measurement rather than intuition, then reverted.
 The evidence that ruled it out was recorded, not discarded.
 What could have gone better is
 equally clear from Section~\ref{sec:active-braking}: a reactive
-control design was deployed to physical hardware before it had been
+control design was deployed to QCar before it had been
 adequately traced through or simulated. It produced a genuine
 safety incident. The incident causing no lasting harm does not
 make the shortcut it resulted from acceptable practice. This
@@ -190,7 +190,7 @@ a next step this thesis itself still has the means to take:
     The specific discipline of verifying a component's own upstream
     input, not only its internal consistency, is a general principle
     worth testing on other buffered or task-based hardware interfaces
-    beyond the one vendor library examined here.
+    beyond the one QCar library examined here.
   \item \textbf{Closing the simulated-versus-real replan-complexity gap.}
     Section~\ref{sec:cusp-hw-validation} found that real-hardware K-turn
     manoeuvres occasionally produce substantially higher per-replan
@@ -225,7 +225,7 @@ a next step this thesis itself still has the means to take:
   \item \textbf{IMU/odometry sensor fusion.} This thesis's pose
     estimation between LiDAR updates relies solely on wheel-encoder
     odometry (Section~\ref{sec:qcar-platform}); the QCar's onboard IMU
-    is present and readable through the vendor HAL/PAL library but was
+    is present and readable through the QCar HAL/PAL library but was
     never read by this project's software stack. Fusing the two via
     an extended or unscented Kalman filter, for example the ROS~2
     \texttt{robot\_localization} package, is a specified but unbuilt
@@ -258,9 +258,9 @@ a next step this thesis itself still has the means to take:
     concern rather than a cosmetic one.
 \end{itemize}
 
-The QCar's navigation stack, as delivered by this thesis, reaches
-real closed-loop navigation goals on physical hardware with a
-sim-to-real gap that is now measured, explained and in most respects
+The navigation stack this thesis delivers reaches real closed-loop
+navigation goals on QCar with a sim-to-real gap that is now measured,
+explained and in most respects
 substantially reduced -- the original goal stated in
 Section~\ref{sec:problem-statement}. What remains open is narrower
 and better characterised than what this thesis began with: not
