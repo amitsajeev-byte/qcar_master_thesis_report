@@ -4,10 +4,11 @@
 \section{Summary}
 \label{sec:summary}
 
-This thesis set out to migrate a Nav2-based navigation stack for an
-Ackermann-steered vehicle, the Quanser QCar, from a validated Gazebo
-simulation onto the physical robot and to identify and address the
-sim-to-real gap encountered along the way
+This thesis set out to build a complete Nav2-based navigation stack
+from scratch for an Ackermann-steered vehicle, the Quanser QCar. The
+stack was to be validated end-to-end in Gazebo simulation first, then
+migrated onto the physical robot, with the sim-to-real gap encountered
+along the way identified and addressed
 (Section~\ref{sec:problem-statement}). Each of the four sub-questions
 posed in the introduction is answered directly by one methodology
 chapter:
@@ -19,17 +20,18 @@ chapter:
     controller, deliberately adopting real dead-reckoning odometry
     rather than simulation ground truth, so the eventual hardware
     migration would not have to absorb that discrepancy on top of
-    everything else. It then moved to a direct Gazebo drive plugin.
+    everything else. The stack then moved to a direct Gazebo drive
+    plugin.
     As Section~\ref{sec:odom-regression} documents, this plugin
     quietly reverted \texttt{/odom} back to ground truth despite the
     topic name and intent staying the same. This thesis surfaces
     that discrepancy rather than leaving it uncorrected. On top of
     this drive architecture, the full Nav2 stack was itself brought
-    up and validated end-to-end in simulation, following the same
-    teleoperation, SLAM and navigation phasing later applied on
-    hardware (Section~\ref{sec:nav2-sim-bringup}), before any of it
-    reached QCar.
-  \item \textbf{Bridging the QCar's onboard compute}
+    up and validated end-to-end in simulation, before any of it
+    reached QCar, following the same teleoperation, SLAM and
+    navigation phasing (Section~\ref{sec:nav2-sim-bringup}) later
+    migrated onto the QCar hardware.
+  \item \textbf{Bridging the QCar's onboard computer}
     (Chapter~\ref{ch:hardware-bridge}): the vehicle's Jetson TX2 could
     not run the project's ROS~2 Humble stack natively. Its 32\,GB
     eMMC had no realistic room for a second full ROS~2 installation
@@ -69,8 +71,12 @@ chapter:
     plugin. This cut a representative manoeuvre's mean duration from
     \SI{110.2}{\second} (with recoveries) to \SI{43.9}{\second} (with
     none) in simulation. The fix was validated directly on the
-    physical vehicle across two independent goals, with zero
-    recoveries in either (Section~\ref{sec:cusp-freeze}).
+    QCar across two independent goals, with zero
+    recoveries in either (Section~\ref{sec:cusp-freeze}). The
+    LiDAR-fed costmap's dynamic-obstacle avoidance was also observed
+    holding up end to end on QCar, routing the plan around an
+    unmapped object rather than into it
+    (Section~\ref{sec:final-validation}).
 \end{itemize}
 
 Chapter~\ref{ch:results} quantified the resulting gap. Actuator
@@ -118,7 +124,7 @@ statistic rather than a qualitative assessment.
 Section~\ref{sec:results-limitations} states these gaps in full, in
 one place, rather than leaving them scattered across individual
 chapters. Most notably, no systematic goal-reaching success-rate
-campaign was run. One result -- navigation timing -- predates
+campaign was run. One result, navigation timing, predates
 the project's own final fixes. This is reported as an open item rather
 than papered over. The exact next steps to close each of them are
 specific and immediately actionable rather than vague, as the
@@ -128,11 +134,10 @@ Prospects below make concrete.
 \label{sec:prospects}
 
 Each limitation named in Section~\ref{sec:results-limitations}
-motivates at least one item below. This project's hardware access
-concluded with the final session reported throughout
-Chapter~\ref{ch:results}. Every item below is accordingly a direction
-for continuation work -- by this project or a successor -- rather than
-a next step this thesis itself still has the means to take:
+motivates at least one item below. Every item below is accordingly a
+direction for continuation work -- by this project or a successor --
+rather than a next step this thesis itself still has the means to
+take:
 
 \begin{itemize}
   \item \textbf{Re-running the pre-fix navigation-timing measurement.}
@@ -260,11 +265,10 @@ a next step this thesis itself still has the means to take:
 \end{itemize}
 
 The navigation stack this thesis delivers reaches real closed-loop
-navigation goals on QCar with a sim-to-real gap that is now measured,
-explained and in most respects
-substantially reduced -- the original goal stated in
-Section~\ref{sec:problem-statement}. What remains open is narrower
-and better characterised than what this thesis began with: not
-why the system does not work, but two specific, already-scoped
-measurements and two specific, already-identified directions for
-further improvement.
+navigation goals on QCar, with the sim-to-real gap identified in
+Section~\ref{sec:problem-statement} now measured, explained and, in
+most respects, substantially reduced. This meets the goal this thesis
+set out to achieve. What remains open is narrower and far better
+understood than what this thesis began with: not open-ended
+uncertainty about why the system fails, but the specific,
+already-scoped measurements and improvements set out above.

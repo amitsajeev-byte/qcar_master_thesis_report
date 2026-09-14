@@ -15,14 +15,13 @@ heavily pursued applications of modern robotics, promising to
 navigate complex, populated environments without human intervention.
 Realising that promise at full scale is costly and safety-critical,
 so a common alternative is to first develop and validate the same
-core competencies -- mapping, localisation and navigation -- on a
+core competencies, mapping, localisation and navigation, on a
 small-scale, QCar platform.
 
 This thesis uses the Quanser QCar for exactly that purpose: a
 1/10th-scale, real-wheel-drive, Ackermann-steered research vehicle
 equipped with a 2D LiDAR, an inertial measurement unit (IMU) and an
-onboard NVIDIA Jetson TX2 compute module \cite{quanser2023qcar}. It
-is a physically real, if miniature, self-driving car. The
+onboard NVIDIA Jetson TX2 compute module \cite{quanser2023qcar}. The
 practical challenges of autonomous navigation can be identified and
 solved on it directly, rather than only theorised about.
 
@@ -36,7 +35,7 @@ localisation within that map and closed-loop trajectory control. In
 contemporary robotics practice, building such a stack begins in
 simulation, where repeatable, safe iteration lets a planner be tuned
 against a thousand trial runs before it is ever allowed to steer a
-physical vehicle. The pattern runs deep enough in the field that
+physical vehicle. This pattern runs deep enough in the field that
 entire open-source ecosystems are built around software that runs,
 largely unmodified, against either a simulated or a physical robot.
 Three such ecosystems anchor this thesis: the Robot Operating System
@@ -47,8 +46,8 @@ navigation stack \cite{macenski2020nav2}.
 Simulation here was never treated as a separate or preliminary
 exercise. It was the first of two necessary phases toward one end
 goal: a navigation stack validated on the physical QCar. Every
-design decision made in simulation -- the vehicle's kinematic model,
-its sensor suite, the manoeuvres it was asked to perform -- was made
+design decision made in simulation, the vehicle's kinematic model,
+its sensor suite and the manoeuvres it was asked to perform, was made
 with the real QCar's actual capabilities in mind, not any capability
 convenient only in simulation. The aim was for migrating the
 finished stack onto hardware to be a validation step, not a
@@ -62,13 +61,10 @@ reports on both in turn.
 \section{Problem Statement}
 \label{sec:problem-statement}
 
-At the outset of this project, no navigation stack had yet been
-developed for the QCar. The complete pipeline -- sensor-driven
-mapping, localisation and navigation -- had to be designed and
-built from scratch, not extended from an existing implementation.
-The \emph{actual state} was ``no working mapping,
-localisation or navigation capability yet built for this project's
-QCar setup, in any form''.
+Building the complete pipeline, sensor-driven mapping, localisation
+and navigation, from scratch rather than extending an existing
+implementation was the explicit goal. The \emph{actual state} was
+that this project's QCar setup had no navigation stack of its own yet.
 
 The \emph{target state} was two-fold, matching the two phases
 described in Section~\ref{sec:motivation}: a complete navigation
@@ -90,7 +86,7 @@ each of which forms one methodology chapter of this thesis:
         the real QCar's actual kinematics and sensor suite, so that
         it is a genuine first phase toward hardware operation rather
         than a simulation-only exercise? (Chapter~\ref{ch:sim-stack})
-  \item The robot's onboard compute cannot run the same ROS~2
+  \item The robot's onboard computer cannot run the same ROS~2
         distribution as the navigation stack. How should the two be
         connected so that the rest of the stack does not need to
         know the difference? (Chapter~\ref{ch:hardware-bridge})
@@ -146,8 +142,8 @@ to pose estimation within a known map
 Sim-to-real transfer is most extensively studied in
 reinforcement-learning contexts, where a policy trained purely in
 simulation is deployed with no further real-world tuning
-\cite{zhao2020sim2real}. This project's navigation stack -- SLAM,
-AMCL and MPPI -- is classically engineered rather than learned and
+\cite{zhao2020sim2real}. This project's navigation stack, SLAM,
+AMCL and MPPI, is classically engineered rather than learned and
 is configured identically in both simulation and reality. The
 challenges this thesis reports when migrating that stack to hardware
 (Chapters~\ref{ch:hardware-bridge}--\ref{ch:nav-integration}) are of
@@ -166,7 +162,7 @@ written or substantially modified here. What none of them provide,
 out of the box, is a working answer for this platform's specific
 combination of constraints.
 
-No published Nav2 integration handles a vehicle whose onboard compute
+No published Nav2 integration handles a vehicle whose onboard computer
 cannot run a matching ROS~2 distribution and is too
 storage-constrained to simply install a second one alongside it.
 Closing that gap meant designing a bespoke, non-ROS communication
@@ -176,7 +172,7 @@ documented and tuned against differential-drive and generic
 holonomic platforms; it has no critic addressing the
 late-turn-commitment behaviour this thesis found on an
 Ackermann-steered vehicle with a wide minimum turning radius
-(Section~\ref{sec:mppi-critic}). Nav2 also ships no fix for the
+(Section~\ref{sec:mppi-critic}). It also ships no fix for the
 reversal-cusp K-turn freeze this thesis reproduced, diagnosed and
 resolved with a custom smoother plugin (Section~\ref{sec:cusp-freeze}).
 This failure mode is specific to tight-space Ackermann geometry, not
@@ -186,7 +182,7 @@ This thesis's own contributions sit in five places:
 
 \begin{itemize}
   \item the TCP/JSON bridge architecture connecting the navigation
-    stack to a storage-constrained, ROS-incompatible onboard compute
+    stack to a storage-constrained, ROS-incompatible onboard computer
     (Chapter~\ref{ch:hardware-bridge});
   \item \texttt{EarlyCommitCritic}, a custom MPPI critic plugin
     addressing Ackermann-specific late-turn commitment
@@ -233,7 +229,7 @@ chapters are structured as follows:
         in simulation, following the same teleoperation/SLAM/navigation
         phasing later applied on hardware.
   \item Presents the design of the TCP/JSON bridge that connects the
-        ROS~2-based navigation stack to the robot's onboard compute,
+        ROS~2-based navigation stack to the robot's onboard computer,
         which cannot run that stack natively, including the odometry,
         LiDAR angle-convention and steering-trim fixes required to
         make the bridged sensor and actuator data trustworthy.

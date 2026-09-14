@@ -188,8 +188,8 @@ its final, direct-drive architecture (Section~\ref{sec:second-migration}).
 The navigation stack's final drive architecture is the one this
 thesis's hardware bridge (Chapter~\ref{ch:hardware-bridge}) targets.
 It is also the configuration this thesis's own results are
-ultimately built on. It drops \texttt{ros2\_control} entirely,
-driving the robot instead through
+ultimately built on, dropping \texttt{ros2\_control} entirely to
+drive the robot instead through
 \texttt{libgazebo\_ros\_ackermann\_drive.so}\allowbreak{} directly,
 declared in a \texttt{<gazebo>} block in the URDF rather than through
 a separate controller-manager configuration file. This
@@ -244,7 +244,7 @@ drifting in simulation.
 It is, however, a genuine and previously unrecorded discrepancy
 between this thesis's stated intent -- training against the same
 \emph{kind} of odometry the physical robot will have -- and what the
-final simulation configuration actually exercises. It is worth
+final simulation configuration actually exercises. This deserves
 stating plainly rather than leaving the earlier claim uncorrected:
 \textbf{only the physical QCar's own odometry
 (Chapter~\ref{ch:hardware-bridge}, Section~\ref{sec:onboard-bridge-odom})
@@ -510,12 +510,12 @@ Simulation development followed the same three-phase approach
 Chapter~\ref{ch:nav-integration} later applies on hardware. Phase 1,
 teleoperation, is what the sections above cover: manual
 \texttt{/cmd\_vel} commands confirmed the drive architecture worked
-correctly before anything more complex was layered on top. Phase 2,
-SLAM, used Cartographer (Section~\ref{sec:cartographer}) to drive the
-simulated vehicle under teleoperation and build and save a Gazebo
-map via \texttt{map\_saver\_cli}, the same map
-Section~\ref{sec:cusp-repro}'s K-turn reproduction later extends.
-Phase 3, navigation, is the subject of this section.
+correctly before anything more complex was layered on top.
+Cartographer (Section~\ref{sec:cartographer}) then drove Phase 2,
+SLAM, under teleoperation, building and saving a Gazebo map via
+\texttt{map\_saver\_cli}, the same map Section~\ref{sec:cusp-repro}'s
+K-turn reproduction later extends. Phase 3, navigation, is the
+subject of this section.
 
 With the drive architecture, the behaviour-tree fix and a saved
 simulation map all in place, the full Nav2 stack was brought up and

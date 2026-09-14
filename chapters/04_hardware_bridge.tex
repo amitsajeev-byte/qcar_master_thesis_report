@@ -86,7 +86,7 @@ departing from the vendor-supported software image.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.75\textwidth]{figures/qcar-compute-sideview-photo.jpg}
-  \caption{The physical QCar, raised off the ground, whose onboard compute stack this bridge architecture runs on.}
+  \caption{The physical QCar, raised off the ground, whose onboard computer this bridge architecture runs on.}
   \label{fig:qcar-compute-sideview-photo}
 \end{figure}
 
@@ -112,7 +112,7 @@ into the motor socket. The same node also publishes \texttt{sensor\_msgs/LaserSc
 on \texttt{/scan} and \texttt{nav\_msgs/Odometry} plus the
 \texttt{odom} $\rightarrow$ \texttt{base} TF on \texttt{/odom}, from
 data received back over both sockets. Every other node in the
-navigation stack -- Nav2, AMCL, Cartographer, RViz -- interacts with
+navigation stack, Nav2, AMCL, Cartographer and RViz, interacts with
 this relay node exactly as it would with the simulation's own drive
 plugin. This requires no awareness that the underlying vehicle is real
 hardware reached over a bespoke protocol rather than a co-located

@@ -5,14 +5,14 @@ This chapter describes bringing the full Nav2 navigation stack up
 against the physical QCar, building on the bridge of
 Chapter~\ref{ch:hardware-bridge} and the calibration of
 Chapter~\ref{ch:calibration}. Section~\ref{sec:nav2-porting} covers
-porting the simulation-tuned Nav2 configuration to hardware.
-Section~\ref{sec:mppi-critic} describes a custom MPPI critic plugin
-developed for this vehicle. Section~\ref{sec:phased-integration}
-reports the phased bring-up used to de-risk the integration.
-Section~\ref{sec:display-lag} presents a detailed timing
-investigation into an apparent localisation-display artefact.
-Section~\ref{sec:final-validation} reports the resulting end-to-end
-validation.
+porting the simulation-tuned Nav2 configuration to hardware, followed
+by a custom MPPI critic plugin developed for this vehicle in
+Section~\ref{sec:mppi-critic}. The phased bring-up used to de-risk the
+integration is reported in Section~\ref{sec:phased-integration},
+before an apparent localisation-display artefact gets a detailed
+timing investigation in Section~\ref{sec:display-lag}.
+Section~\ref{sec:final-validation} closes the chapter with the
+resulting end-to-end validation.
 
 \section{Porting the Nav2 Configuration to Hardware}
 \label{sec:nav2-porting}
@@ -361,11 +361,13 @@ to complete before the freeze sets in.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/cusp-rviz-plan.png}
+  \includegraphics[width=0.85\textwidth]{figures/cusp-rviz-plan-v2.png}
   \caption[The reproduction goal's reversal cusp in RViz]{The reproduction goal's cusp in RViz: the global
-    \texttt{/plan} (green) reverses direction at a single vertex. The
-    short executed segment (orange/red) shows how little of the
-    reversal leg is actually completed before the freeze.}
+    \texttt{/plan} (green) reverses direction at a single vertex right
+    at the vehicle's position, largely hidden here behind the dense
+    MPPI trajectory-rollout markers. The short executed segment
+    (orange/red) shows how little of the reversal leg is actually
+    completed before the freeze.}
   \label{fig:cusp-rviz-plan}
 \end{figure}
 
@@ -617,6 +619,13 @@ configuration.
   \label{fig:cusp-extend-geometry}
 \end{figure}
 
+Figure~\ref{fig:hardware-kturn-nav} below shows this same construction
+in an actual simulated trial rather than the schematic above: the
+global plan (green) reaches a vertex, and the short red segment beyond
+it is the extension point of Listing~\ref{lst:cusp-extend}, pushed out
+along the incoming leg's own heading before the blend back to the
+outgoing leg begins.
+
 \subsection{QCar Validation}
 \label{sec:cusp-hw-validation}
 
@@ -624,18 +633,21 @@ The fixed, corner-extending smoother was tested on the physical QCar
 with two goals I sent manually, each requiring a
 genuine reversal manoeuvre. A \SI{5.15}{\meter} traverse completed in
 \SI{50.1}{\second} with zero recoveries across seven replans (cusp
-counts 1, 1, 1, 1, 8, 8, 0). A second, longer traverse completed in
+counts 1, 1, 1, 1, 8, 8, 0). The second, longer traverse completed in
 \SI{96.8}{\second}, also with zero recoveries, across eight replans
 (cusp counts 5, 5, 5, 5, 9, 10, 5, 3). Both goals succeeded outright --
 the strongest available confirmation that the fix generalises beyond
 the simulated corridor reproduction it was developed against.
 Figures~\ref{fig:cusp-hardware-zoom} and~\ref{fig:hardware-kturn-nav}
-are taken from this QCar validation session.
+are both taken from simulated reversal trials rather than this QCar
+session itself, included here to illustrate the same cusp and
+navigation-feedback behaviour more clearly than the QCar session's
+own recordings allowed.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.55\textwidth]{figures/cusp-hardware-zoom.png}
-  \caption[A reversal cusp during QCar validation]{A reversal cusp during QCar validation: the global
+  \includegraphics[width=0.55\textwidth]{figures/cusp-extend-sim-zoom.png}
+  \caption[A reversal cusp during a simulated validation trial]{A reversal cusp during a simulated validation trial: the global
     plan (green) folding back on itself, with the locally-smoothed
     path (red) already following the corner-extended geometry of
     Section~\ref{sec:cusp-extend} rather than the original sharp
@@ -645,8 +657,8 @@ are taken from this QCar validation session.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/hardware-kturn-nav.png}
-  \caption[RViz during a QCar reversal-manoeuvre trial]{RViz during one of the QCar reversal-manoeuvre
+  \includegraphics[width=0.85\textwidth]{figures/cusp-sim-nav-feedback.png}
+  \caption[RViz during a simulated reversal-manoeuvre trial]{RViz during one of the simulated reversal-manoeuvre
     trials: the navigation feedback panel (left) reports the goal as
     still active, with ETA and distance-remaining updating live as the
     vehicle follows the curved approach into the reversal.}
@@ -1024,8 +1036,7 @@ The diagnostic methodology and tooling built in this section remain
 valid and reusable: the QoS/goal-detection fixes and the systematic
 elimination of TF-jump, Fixed-Frame and network-latency causes all
 still hold. A dedicated re-run of this exact instrumentation was not
-completed before this project's hardware access concluded.
-Chapter~\ref{ch:results} instead reports the full quantitative outcome
+completed. Chapter~\ref{ch:results} instead reports the full quantitative outcome
 of later, post-fix goals directly from AMCL pose and velocity logs
 (Section~\ref{sec:results-goal-reaching}).
 
@@ -1051,6 +1062,19 @@ Chapter~\ref{ch:summary}'s Prospects, record the specific gaps that
 remained, including the still-unresolved LiDAR display freeze during
 turns and the map-scale/localisation bias
 (Section~\ref{sec:results-map-localization}).
+
+One further behaviour is worth recording here, even though it was
+never run as a dedicated, logged trial: on more than one occasion
+during these runs, an object with no place in the saved static map
+was standing in the vehicle's path. The LiDAR picked it up, the local
+costmap's obstacle layer marked it as occupied and the planner routed
+around it rather than driving through it. This is exactly the
+dynamic-obstacle behaviour the costmap layers of
+Section~\ref{sec:nav2} are designed to provide. Seeing it hold up
+end to end, LiDAR to costmap to a revised plan, on the physical QCar
+and not only in Nav2's own documentation, is a genuine, positive
+confirmation, reported here qualitatively since no dedicated trial
+measured it directly.
 
 \section{Summary}
 \label{sec:nav-integration-summary}
