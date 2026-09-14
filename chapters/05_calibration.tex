@@ -94,8 +94,8 @@ several seconds after a stop was commanded.
 A corrective control law was implemented directly in
 \texttt{qcar\_bridge.py}: a reverse-throttle brake pulse proportional
 to the residual measured velocity, intended to actively cancel the
-coasting motion. \textbf{This was deployed directly to physical
-hardware without first being traced through by hand or tested in
+coasting motion. \textbf{This was deployed directly to the
+QCar without first being traced through by hand or tested in
 simulation.} On its first test, it produced a genuine, dangerous
 oscillation: the vehicle lurched forward and backward repeatedly,
 reaching \SI{-0.88}{\meter\per\second} in reverse and still
@@ -152,8 +152,8 @@ justification here.
 \section{Sim-versus-Real Comparison}
 \label{sec:sim-vs-real}
 
-Following a methodology suggested by my academic
-supervisor, the identical closed-loop stop-distance test (drive $N$
+Following a methodology suggested by the supervisor, the
+identical closed-loop stop-distance test (drive $N$
 metres at a fixed speed, stop the instant odometry crosses the
 target) was reproduced in both the physical robot and the Gazebo
 simulation of Chapter~\ref{ch:sim-stack}, using the same launch stack
@@ -389,7 +389,7 @@ reading would have frozen the position too, which it demonstrably
 did not.
 
 The argument that ultimately identified the true cause was not a
-further measurement, but a piece of physical reasoning I raised
+further measurement, but a piece of physical reasoning raised
 directly: \emph{an encoder is a real-time sensor -- it cannot have a
 built-in two-second lag by itself.} This redirected the investigation
 toward a question the prior analysis had not asked: not whether the
@@ -418,10 +418,10 @@ process starts, the buffer fills and cycles during that idle gap.
 Once reads begin at a consumption rate matching the production rate
 exactly, the read stream is permanently stuck approximately 100
 samples (\SI{2.0}{\second}) behind real time, because the backlog
-never has an opportunity to drain. My own reading of this design is
-that \texttt{readMode=1} exists mainly as a debugging convenience
-within the QCar HAL: a background task a developer can poll without
-managing acquisition timing directly. It does not read like a mode
+never has an opportunity to drain. This design appears intended
+mainly as a debugging convenience within the QCar HAL:
+\texttt{readMode=1} runs a background task a developer can poll
+without managing acquisition timing directly. It does not read like a mode
 meant for a real-time control loop such as this project's bridge.
 
 \paragraph{Why the lag is exactly the buffer depth, forever.}
@@ -611,8 +611,8 @@ It says nothing about whether a nonzero commanded angle produces the
 correct amount of real wheel deflection. For a long period of
 this project nobody had verified that separately. The gap surfaced
 directly during Nav2 integration (Chapter~\ref{ch:nav-integration}):
-I reported that autonomous navigation on real
-hardware was ``not turning as well as sim,'' a complaint that a pure
+autonomous navigation on QCar was reported as ``not turning as well
+as sim,'' a complaint that a pure
 offset error cannot explain, since an offset only shifts the
 zero-point and leaves proportionality untouched.
 
@@ -726,8 +726,8 @@ lateral deflection. The measured deflection was \SI{27}{\centi\meter},
 a residual error of $\approx$5.6\%, down from $\approx$39\% with no
 gain correction at all. The fix was subsequently
 confirmed in genuine closed-loop use. After re-running autonomous
-Nav2 navigation on the physical vehicle post-deployment, my
-direct assessment was that turning behaviour had visibly
+Nav2 navigation on the physical vehicle post-deployment, a
+direct assessment found that turning behaviour had visibly
 improved. This is consistent with the gain error having been the
 dominant cause of the original complaint rather than merely a
 contributing factor.
@@ -760,8 +760,8 @@ deflected by the trim amount, even while the vehicle was in reality
 driving dead straight. A live test briefly exposed this directly: a
 straight-line drive of approximately \SI{2.8}{\meter} produced a
 fictitious $y \approx \SI{-1.72}{\meter}$ in the odometry output, a
-spurious $\sim$\ang{30} curve that did not correspond to any real
-vehicle motion.
+spurious $\sim$\ang{30} curve that did not correspond to any actual
+QCar motion.
 
 The fix separated \texttt{compute\_steering()} (returns the
 untrimmed, kinematic steering angle, used for odometry) from a new
@@ -816,8 +816,8 @@ to genuine vehicle physics.
 
 Neither cause was found by reasoning from documentation or first
 principles alone. Both required direct, targeted measurement on the
-physical robot. The second was found only after I raised a direct
-physical argument that prompted reading QCar's
+physical robot. The second was found only after a direct
+physical argument prompted reading QCar's
 own source code, rather than continuing to trust an internally
 self-consistent, but incompletely verified, software abstraction.
 

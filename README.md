@@ -9,8 +9,9 @@ migration, formatted against the Deggendorf Institute of Technology
 1. Overleaf -> **New Project -> Upload Project** -> select
    `qcar-master-thesis.zip` (not a blank project + drag-and-drop,
    which flattens the folder structure).
-2. Confirm the main document is `main.tex` (project menu -> Main
-   document; usually auto-detected).
+2. Confirm the main document is
+   `Master_Thesis_Report_Amit_Sajeev_22306894.tex` (project menu ->
+   Main document; usually auto-detected).
 3. Compiler: **pdfLaTeX** (default). The bibliography uses plain
    BibTeX (`\bibliographystyle{plain}` + `\bibliography{...}`), not
    biblatex/biber, and the abbreviations index is a plain table, not

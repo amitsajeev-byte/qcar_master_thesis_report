@@ -76,9 +76,6 @@ considered early on. It only partially sidesteps the storage
 question: a container image adds its own storage overhead rather
 than removing it. Nor does it address the protocol-version
 incompatibility at the DDS transport layer at all.
-The Dashing side of the link is fixed by what physically runs on the
-vehicle's ROS~2 partition and cannot itself be upgraded without
-departing from the vendor-supported software image.
 
 \section{Bridge Architecture Overview}
 \label{sec:bridge-architecture}
@@ -114,8 +111,8 @@ on \texttt{/scan} and \texttt{nav\_msgs/Odometry} plus the
 data received back over both sockets. Every other node in the
 navigation stack, Nav2, AMCL, Cartographer and RViz, interacts with
 this relay node exactly as it would with the simulation's own drive
-plugin. This requires no awareness that the underlying vehicle is real
-hardware reached over a bespoke protocol rather than a co-located
+plugin. This requires no awareness that the underlying vehicle is
+reached over a bespoke protocol rather than a co-located
 Gazebo simulation.
 
 Listing~\ref{lst:bridge-recv-loop} shows the command-receiving side of
@@ -173,16 +170,6 @@ This was a real, exercised advantage throughout this project's
 development, not a theoretical one. A plain delimiter also requires
 no shared binary schema to keep in sync between the QCar-side Python
 and dev-PC-side Python.
-
-This is also why \texttt{buf} accumulates across \texttt{recv()}
-calls, rather than assuming one \texttt{recv()} returns exactly one
-message. TCP's byte-stream semantics make no guarantee that message
-boundaries align with any particular \texttt{recv()} call's return:
-a message can legitimately arrive split across two calls or two
-messages can arrive concatenated in one call.
-Listing~\ref{lst:bridge-recv-loop}'s \texttt{while b'\textbackslash n' in buf}
-loop handles both cases uniformly, by always operating on whatever
-has accumulated so far.
 
 \textbf{One full-duplex socket carrying both directions},
 rather than two separate one-way sockets for commands and odometry:
@@ -451,7 +438,7 @@ enough drive.
 \section{Clock Synchronisation and the Receipt-vs-Capture Timestamp Bug}
 \label{sec:clock-offset}
 
-The first real navigation-goal test I ran, once mapping,
+The first real navigation-goal test, run once mapping,
 localisation and the fixes above were all in place, surfaced a new
 symptom: sudden AMCL localisation jumps and visible path deviation
 on both straight and curved segments. The description of what was actually observed was
@@ -594,8 +581,8 @@ worth confirming it has actually exited rather than assuming);
 (4)~stop \texttt{qcar\_bridge.py} on the QCar (requires \texttt{sudo}).
 This project's own operational experience found it is not sufficient
 to trust that the sequence \emph{was run}. On one occasion, the
-motor bridge was still listening on its TCP port after I
-believed it had been stopped. The documented procedure therefore
+motor bridge was still listening on its TCP port after it was
+believed to have been stopped. The documented procedure therefore
 explicitly includes confirming both TCP ports (5555, 5556) are
 released on the QCar (\texttt{ss -tlnp}) before considering the
 vehicle idle.

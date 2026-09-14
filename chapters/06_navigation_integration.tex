@@ -229,18 +229,6 @@ entire system:
     drives.
 \end{description}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/hardware-map-first.png}
-  \caption[The Phase~2 occupancy grid from real LiDAR data]{The Phase~2 occupancy grid, built from real LiDAR data
-    while driving the physical QCar under teleoperation and saved via
-    \texttt{map\_saver\_cli} -- the same map used for all subsequent
-    hardware localisation and navigation testing. RViz's own
-    navigation panel (left) reports a goal reached with zero
-    recoveries.}
-  \label{fig:hardware-map-first}
-\end{figure}
-
 The full stack's initial bring-up, motor bridge, LiDAR node, relay
 node and the ported Nav2 launch configuration, came up cleanly on
 the first attempt against the saved Phase~2 map. Both Nav2 lifecycle
@@ -317,7 +305,7 @@ next section were attempted.
 Beyond the display-latency and calibration issues of the preceding
 sections, QCar testing in tight spaces surfaced a distinct
 and more serious navigation problem. A goal requiring the vehicle to
-turn around produced, in my own words at the time, ``a chaotic curve, then
+turn around produced a motion described at the time as ``a chaotic curve, then
 reverse with opposite curve, then forward curve.'' The result was a
 visibly hesitant, multi-second freeze at the direction change, rather
 than a clean, continuous K-turn. This section documents the
@@ -621,7 +609,7 @@ configuration.
 
 Figure~\ref{fig:hardware-kturn-nav} below shows this same construction
 in an actual simulated trial rather than the schematic above: the
-global plan (green) reaches a vertex, and the short red segment beyond
+global plan (green) reaches a vertex and the short red segment beyond
 it is the extension point of Listing~\ref{lst:cusp-extend}, pushed out
 along the incoming leg's own heading before the blend back to the
 outgoing leg begins.
@@ -630,7 +618,7 @@ outgoing leg begins.
 \label{sec:cusp-hw-validation}
 
 The fixed, corner-extending smoother was tested on the physical QCar
-with two goals I sent manually, each requiring a
+with two manually sent goals, each requiring a
 genuine reversal manoeuvre. A \SI{5.15}{\meter} traverse completed in
 \SI{50.1}{\second} with zero recoveries across seven replans (cusp
 counts 1, 1, 1, 1, 8, 8, 0). The second, longer traverse completed in
@@ -1048,7 +1036,7 @@ the project's final hardware sessions sent a series of live Nav2 goals
 against the existing saved map -- full onboard bridge, LiDAR node and
 relay node running end to end, with AMCL localised throughout. The
 vehicle reliably reached its marked goal position across these runs.
-My direct, contemporaneous assessment at the time was that navigation
+The direct, contemporaneous assessment at the time was that navigation
 was ``working almost perfectly,'' consistent with the buffering
 defect having been the dominant cause of the ``skeleton of the map is
 moving'' symptom that opened Section~\ref{sec:display-lag}, rather

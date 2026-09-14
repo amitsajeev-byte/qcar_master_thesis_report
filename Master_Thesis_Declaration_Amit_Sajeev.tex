@@ -1,0 +1,18 @@
+% ============================================================
+% Standalone Declaration page - separate PDF for submission
+% upload alongside the full thesis. Sourced from the signed PDF
+% (frontmatter/signed_declaration.pdf, page 1), the same file
+% embedded into the main thesis, so this can never drift out of
+% sync with the copy bound into the full report.
+% ============================================================
+
+\documentclass[11pt,a4paper,oneside]{report}
+
+\input{preamble}
+
+\begin{document}
+\pagenumbering{gobble}
+
+\includepdf[pages=1,pagecommand={\thispagestyle{empty}}]{frontmatter/signed_declaration.pdf}
+
+\end{document}

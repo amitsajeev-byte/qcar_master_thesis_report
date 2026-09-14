@@ -41,11 +41,16 @@
 \input{frontmatter/acknowledgement}    % guideline 4.1.3 - precedes Authorship per guideline order
 \clearpage
 
-\input{frontmatter/authorship}         % Declaration - mandatory per abschlussarbeit_anmeldung_master_mss_en.pdf, bound directly after title page, no page number
-\clearpage
+% Declaration - mandatory per abschlussarbeit_anmeldung_master_mss_en.pdf,
+% bound directly after title page, no page number. Embedded as the
+% signed PDF page (frontmatter/signed_declaration.pdf) rather than
+% \input{frontmatter/authorship} directly, so the bound copy carries
+% the actual signature/date rather than blank fill-in lines.
+\includepdf[pages=1,pagecommand={\thispagestyle{empty}}]{frontmatter/signed_declaration.pdf}
 
-\input{frontmatter/ai_declaration}     % Declaration Concerning Usage of AI - separate page, no page number
-\clearpage
+% Declaration Concerning Usage of AI - separate page, no page number.
+% Same signed PDF, page 2.
+\includepdf[pages=2,pagecommand={\thispagestyle{empty}}]{frontmatter/signed_declaration.pdf}
 
 \input{frontmatter/abbreviations}       % per guideline 4.1.5 - precedes Abstract per guideline order
 \clearpage

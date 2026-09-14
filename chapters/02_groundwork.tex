@@ -248,7 +248,7 @@ that all four wheels roll without slipping through a common turn
 centre.
 
 For control and estimation purposes, this thesis follows the
-standard simplification to a single-track (``bicycle'') model
+standard simplification to a single-track bicycle model
 \cite{snider2009pathtracking}, which replaces the two front wheels with
 a single virtual wheel at the centre of the front axle steered at
 angle $\delta$ and the two rear wheels with a single virtual wheel
@@ -877,7 +877,7 @@ and obstacle sensing, with pose estimation between LiDAR updates
 coming from wheel-encoder-based odometry rather than the IMU.
 
 The IMU is electrically present and exposed by QCar's HAL/PAL
-library (\texttt{gyroscope}/\texttt{accelerometer} fields), but
+library (\texttt{gyroscope/}\allowbreak\texttt{accelerometer} fields), but
 nothing in this project's software stack reads it. Cartographer's
 \texttt{use\_imu\_data} is left \texttt{false}. No IMU sensor
 plugin is declared in the simulation's URDF either, so only the
@@ -946,7 +946,7 @@ thesis's methodology chapters:
 
 \begin{itemize}
   \item \textbf{Unmodelled or under-modelled physical effects} --
-    e.g.\ static friction / stiction, actuator response lag, or
+    e.g.\ static friction / stiction, actuator response lag or
     non-linear actuator-to-output mappings that a simulator either
     omits entirely or models only in idealised form. Chapter~\ref{ch:calibration}'s
     throttle calibration and friction-deadband findings are a direct
@@ -962,7 +962,7 @@ thesis's methodology chapters:
     simulated robot typically runs its entire software stack as
     co-located ROS~2 processes on one machine. A physical robot may
     be split across incompatible middleware versions, unreliable
-    wireless links, or, as found directly in this project, firmware-
+    wireless links or, as found directly in this project, firmware-
    or driver-level buffering that a simulation has no equivalent of
     at all. Chapters~\ref{ch:hardware-bridge}
     and~\ref{ch:calibration} both document findings in this

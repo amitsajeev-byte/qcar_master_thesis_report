@@ -8,8 +8,8 @@
 
 This chapter documents the development of the simulation-side
 navigation stack that Chapters~\ref{ch:hardware-bridge}
-through~\ref{ch:nav-integration} later migrate onto physical
-hardware. The stack went through two full drive-architecture migrations before
+through~\ref{ch:nav-integration} later migrate onto the
+QCar. The stack went through two full drive-architecture migrations before
 reaching the form used for hardware bridging
 (Sections~\ref{sec:baseline-manual}--\ref{sec:second-migration}).
 Along the way, it surfaced a four-part vehicle-dynamics bug pattern
@@ -47,7 +47,7 @@ Early experimentation approached the QCar as a generic four-wheeled
 robot with front-wheel steering, controllable in much the same way as
 a differential-drive platform. This was the simplest model to get the
 vehicle moving at all. It became clear soon after that this
-simplification did not hold: the QCar is genuinely Ackermann-steered,
+simplification did not hold: the QCar is genuinely Ackermann-steered
 and a differential-drive-style controller has no way to express the
 coordinated left/right hub-angle split that Ackermann steering
 requires. This is what motivated computing a proper Ackermann
@@ -392,7 +392,7 @@ A methodological point generalises from this bug pattern: none of
 these four bugs are visible from \texttt{ros2 topic
 list} or a static inspection of the URDF alone. A simulated robot
 that appears correctly configured can simultaneously be in freefall,
-frozen inside a crashed-but-still-running \texttt{gzserver} process,
+frozen inside a crashed-but-still-running \texttt{gzserver} process
 or driving its wheels at 100\% slip with zero real chassis motion.
 None of these states are distinguishable without directly comparing
 \texttt{/odom} position over several seconds of sustained commanded

@@ -312,7 +312,7 @@ driving and real turning were completed successfully on the physical
 QCar on multiple occasions across this project. This was confirmed
 both by \texttt{bt\_navigator}'s own \texttt{Goal succeeded} status
 and, in the final validation of Section~\ref{sec:final-validation}, by
-my own direct observation that localisation tracked the
+direct observation that localisation tracked the
 vehicle's real motion closely throughout the goal, rather than
 exhibiting the map-shift artefact of Section~\ref{sec:display-lag}. The one
 navigation timing measurement available (Table~\ref{tab:display-lag})
@@ -324,7 +324,7 @@ figure, per the caveat in Section~\ref{sec:display-lag-interpretation}.
 The one goal class with a genuine, repeated hardware success count is
 the reversal/K-turn manoeuvre of Section~\ref{sec:results-cusp}: 2 of
 2 sent goals succeeded with zero recoveries. General straight-line and
-gentle-turn goal-reaching, by contrast, is supported only by my own
+gentle-turn goal-reaching, by contrast, is supported only by the
 qualitative assessments above and by individual successful
 \texttt{Goal succeeded} events logged during development, not by a
 planned, repeated multi-goal trial campaign with a computed success
@@ -912,7 +912,7 @@ The throttle deadband/gain values (Equation~\ref{eq:throttle-calibration})
 and the steering-trim value (Section~\ref{sec:steering-trim}) are
 per-unit calibration constants, expected to differ, potentially
 substantially, on a different physical QCar chassis or even on
-this same chassis under different tyre wear, floor surface, or
+this same chassis under different tyre wear, floor surface or
 battery charge conditions. This was confirmed directly later-on.
 Three clean, repeated \SI{2}{\meter} forward runs
 at three different commanded speeds all showed a consistent
