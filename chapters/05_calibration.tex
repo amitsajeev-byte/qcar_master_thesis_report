@@ -8,10 +8,10 @@
 % referenced here.
 
 This chapter documents this project's vehicle calibration work as a
-whole: two independent problems, both exposed by real-hardware
+whole: two independent problems, both exposed by QCar
 testing and both resolved with the same empirical, measurement-first
 approach. The first and larger is the longest and most consequential
-investigation of the project. A real-hardware symptom emerged in
+investigation of the project. A QCar symptom emerged in
 which the vehicle, commanded to travel a fixed distance and then
 stop, consistently travelled substantially further before actually
 coming to rest, in the worst observed case roughly three times as far.
@@ -144,7 +144,7 @@ Both modified files were reverted to their original state.
 This incident is the clearest instance in this project of the general
 principle stated in Section~\ref{sec:methodology-overview}: a
 reactive feedback controller acting on a live sensor reading should
-be traced through by hand for an overshoot scenario, or tested in
+be traced through by hand for an overshoot scenario or tested in
 simulation, before it is ever sent to QCar. ``The
 control theory seems sound'' was not, on its own, sufficient
 justification here.
@@ -157,26 +157,26 @@ supervisor, the identical closed-loop stop-distance test (drive $N$
 metres at a fixed speed, stop the instant odometry crosses the
 target) was reproduced in both the physical robot and the Gazebo
 simulation of Chapter~\ref{ch:sim-stack}, using the same launch stack
-with only the drive target switched from simulated to real hardware.
+with only the drive target switched from simulated to QCar.
 
 A six-point sweep across three target distances
 (\SIlist{1.0;1.5;2.0}{\meter}) and three commanded speeds
-(\SIlist{0.20;0.25;0.30}{\meter\per\second}) found real
-hardware overshoot in the range \SIrange{0.58}{2.12}{\meter} across
+(\SIlist{0.20;0.25;0.30}{\meter\per\second}) found QCar
+overshoot in the range \SIrange{0.58}{2.12}{\meter} across
 two sessions roughly one hour apart. \emph{Every} tested condition
 was worse in the second session, by a broadly consistent margin.
 
 The matched simulation sweep, over the same six conditions, showed
 overshoot of only \SIrange{0.044}{0.067}{\meter} --
 \SIrange{10}{30}{}$\times$ smaller and only weakly sensitive to
-speed. This is in contrast to the real hardware overshoot, which
+speed. This is in contrast to the QCar overshoot, which
 scaled roughly with the cube of speed. A dedicated, isolated
 comparison at \SI{2}{\meter} / \SI{0.3}{\meter\per\second} sharpened
 this further. The simulated vehicle settled at \SI{2.067}{\meter}
-(an extra \SI{0.067}{\meter}), while the real vehicle settled at
+(an extra \SI{0.067}{\meter}), while QCar settled at
 \SI{3.91}{\meter} (an extra \SI{1.90}{\meter}). This is a
 $\sim$28$\times$ difference for an identical software command. This
-result strongly supports a real-hardware-specific controller/dynamics
+result strongly supports a QCar-specific controller/dynamics
 cause, rather than something inherent to the stop-command approach
 itself. It directly motivated the calibration work in the remainder
 of this chapter.
@@ -235,7 +235,7 @@ lowered gain restored accurate cruise-speed tracking at higher
 commanded speeds, but it also pushed the duty cycle for normal
 teleoperation speeds below the deadband threshold entirely, making
 the vehicle stop responding to real driving commands. This correction
-was reverted the same day to restore usable teleoperation.
+was reverted to restore usable teleoperation.
 
 Gain and deadband are not independent as a result. A single linear
 multiplier applied to the whole range cannot fix both, since scaling
@@ -276,7 +276,7 @@ adjusted by only $+0.0013$ (\texttt{0.0533} vs.\ \texttt{0.052})
 flipped a command from ``27\,s of zero motion'' to reliably covering
 the full target distance. This floor appears to drift somewhat both
 within and across sessions (plausibly floor contact, resting wheel
-position, temperature, or battery voltage). No single threshold
+position, temperature or battery voltage). No single threshold
 measurement from this sweep should be treated as an exact, permanent
 constant.
 
@@ -696,7 +696,7 @@ Independently of the trim value entirely, the real wheel
 also turns approximately 39\% \emph{further} than the kinematic model's
 commanded angle implies for any non-zero command. This is a genuine
 multiplicative gain error, not an offset and one that a pure trim
-correction cannot fix. This gain error is a strong candidate explanation for the
+correction cannot fix. It is a strong candidate explanation for the
 original complaint that motivated the investigation. Nav2's planner
 and MPPI controller both assume the kinematic model of
 Section~\ref{sec:true-ackermann} maps 1:1 onto real wheel angle. A

@@ -32,7 +32,7 @@ discussed in the main text.
     Battery low-voltage warning & below \SI{10.5}{\volt} \\
     Steering command range & $\pm 0.5$~rad \\
     Max.\ physical steering angle & $\pm 0.5236$~rad ($\pm\ang{30}$) \\
-    Overcurrent protection & \SI{5}{\ampere}/\SI{8}{\second}, \SI{10}{\ampere}/\SI{2}{\second}, or \SI{15}{\ampere}/\SI{0.5}{\second} $\to$ forced Neutral mode \\
+    Overcurrent protection & \SI{5}{\ampere}/\SI{8}{\second}, \SI{10}{\ampere}/\SI{2}{\second} or \SI{15}{\ampere}/\SI{0.5}{\second} $\to$ forced Neutral mode \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -63,20 +63,20 @@ data carrier rather than printed.
     \texttt{monitor\_goal\_timing.py} & Instruments one Nav2 goal end-to-end: goal-sent, real/displayed motion start and stop, goal-reached (Section~\ref{sec:monitor-goal-timing}) \\
     \texttt{log\_goal.py} & Logs every \texttt{/plan} replan (sequence-numbered CSVs), \texttt{/odom} and \texttt{/cmd\_vel} for one goal, for offline K-turn/cusp analysis (Section~\ref{sec:cusp-repro}) \\
     \texttt{\seqsplit{CuspStraightenerSmoother}} & \texttt{nav2\_core::Smoother} plugin resolving the reversal-cusp freeze (Section~\ref{sec:cusp-smoother-v2}); locked-in production configuration \\
-    \texttt{\seqsplit{IsPathValidDebouncedCondition}} & Custom BT.CPP condition node requiring consecutive failed validity checks before replanning; implemented and hardware-tested, currently reverted/deselected (Section~\ref{sec:cusp-followon-reverted}) \\
+    \texttt{\seqsplit{IsPathValidDebouncedCondition}} & Custom BT.CPP condition node requiring consecutive failed validity checks before replanning; implemented and hardware-tested, currently reverted/deselected (Section~\ref{sec:ispathvalid-reverted}) \\
     \texttt{\seqsplit{PathDeviationCritic}} & Custom MPPI critic pulling deviated trajectories toward a lookahead path point; implemented and tested, currently reverted/deselected (Section~\ref{sec:cusp-followon-reverted}) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\section{Real-Hardware Bring-Up Command Reference}
+\section{QCar Bring-Up Command Reference}
 \label{app:commands}
 
 For reproducibility, the full bring-up sequence used throughout
 Chapters~\ref{ch:hardware-bridge}--\ref{ch:nav-integration} is
 reproduced here.
 
-\begin{lstlisting}[language=bash,caption={Real-hardware bring-up (two QCar terminals, two development-PC terminals).}]
+\begin{lstlisting}[language=bash,caption={QCar bring-up (two on-board terminals, two development-PC terminals).}]
 # --- On the QCar (two terminals) ---
 sudo -E env PYTHONPATH=/home/nvidia/Documents/python \
     python3 ~/ros2_amit/src/onboard_bridge/qcar_bridge.py

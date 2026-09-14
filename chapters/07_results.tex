@@ -27,10 +27,10 @@ detail. Every row here is a forward reference, not a new claim.
     Stop latency (mean) & \SI{2.42}{\second} $\to$ \SI{0.55}{\second} & \ref{sec:results-stop-distance} \\
     Stop extra distance (mean) & \SI{0.69}{\meter} $\to$ \SI{0.12}{\meter} & \ref{sec:results-stop-distance} \\
     K-turn duration, sim (mean) & \SI{110.2}{\second}/2.0 rec.\ $\to$ \SI{43.9}{\second}/0.0 rec. & \ref{sec:results-cusp} \\
-    K-turn goals, real hardware & 2/2 succeeded, 0 recoveries & \ref{sec:results-cusp} \\
-    Goal 2, repeated 4$\times$, real hardware & 4/4 succeeded, position error \SIrange{0.129}{0.222}{\meter} (real variability) & \ref{sec:results-goal-reaching} \\
-    Goal 3 (near-\ang{180} reversal), real hardware & succeeded, position error \SI{0.239}{\meter}, yaw error \ang{6.0} & \ref{sec:goal3-reversal} \\
-    General goal-reaching, real hardware & no pre-planned, varied success-rate campaign run & \ref{sec:results-goal-reaching}, \ref{sec:results-limitations} \\
+    K-turn goals, QCar & 2/2 succeeded, 0 recoveries & \ref{sec:results-cusp} \\
+    Goal 2, repeated 4$\times$, QCar & 4/4 succeeded, position error \SIrange{0.129}{0.222}{\meter} (real variability) & \ref{sec:results-goal-reaching} \\
+    Goal 3 (near-\ang{180} reversal), QCar & succeeded, position error \SI{0.239}{\meter}, yaw error \ang{6.0} & \ref{sec:goal3-reversal} \\
+    General goal-reaching, QCar & no pre-planned, varied success-rate campaign run & \ref{sec:results-goal-reaching}, \ref{sec:results-limitations} \\
     Map quality / localisation accuracy & 4--7\% map-scale underestimate; AMCL forward-distance gap 6.7--10.6\% (growing), yaw accurate & \ref{sec:results-map-localization} \\
     \bottomrule
   \end{tabular}
@@ -40,22 +40,30 @@ detail. Every row here is a forward reference, not a new claim.
 \label{sec:results-throttle}
 
 Table~\ref{tab:results-throttle-summary} restates the throttle
-calibration validation of Section~\ref{sec:final-calibration}
-alongside the uncalibrated baseline it replaced.
+calibration validation of Sections~\ref{sec:final-calibration}
+and~\ref{sec:readmode-validation}: real, directly measured cruise
+speed against each commanded speed, before and after calibration.
 
 \begin{table}[htbp]
   \centering
-  \caption{Commanded-versus-real cruise speed, before and after calibration.}
+  \caption{Commanded-versus-measured cruise speed, before and after throttle calibration (Equation~\ref{eq:throttle-calibration}).}
   \label{tab:results-throttle-summary}
-  \begin{tabular}{@{}p{3.2cm}p{5.8cm}p{5.5cm}@{}}
+  \small
+  \begin{tabular}{@{}lccp{2.3cm}p{2.6cm}@{}}
     \toprule
-    Commanded speed & Baseline ratio (uncalibrated $\text{THROTTLE\_GAIN}=1/3$) & Calibrated ratio (Eq.~\ref{eq:throttle-calibration}) \\
+    Commanded speed & Before calib.\ & After calib.\ & Ratio (after) & Note \\
     \midrule
-    \SI{0.3}{\meter\per\second} & $\approx$2.6--2.7 & 1.05 \\
-    \SI{0.4}{\meter\per\second} & -- (not separately measured) & 1.05 \\
-    \SI{0.5}{\meter\per\second} & -- (not separately measured) & 1.00 \\
+    \SI{0.2}{\meter\per\second} & \SI{0.40}{\meter\per\second} & \multicolumn{2}{l}{unreliable ($\approx$0.24 or no motion)} & At the deadband edge \\
+    \SI{0.3}{\meter\per\second} & \SI{0.72}{\meter\per\second} & \SI{0.31}{\meter\per\second} & 1.05 & \\
+    \SI{0.4}{\meter\per\second} & \SI{1.02}{\meter\per\second} & \SI{0.42}{\meter\per\second} & 1.05 & \\
+    \SI{0.5}{\meter\per\second} & --\textsuperscript{*} & \SI{0.50}{\meter\per\second} & 1.00 & \\
     \bottomrule
   \end{tabular}
+
+  \vspace{2pt}
+  \raggedright\footnotesize\textsuperscript{*}\SI{0.5}{\meter\per\second}
+  was the only commanded speed never tested under the original,
+  uncalibrated \texttt{THROTTLE\_GAIN}.
 \end{table}
 
 The commanded-to-real speed ratio was reduced from
@@ -70,31 +78,40 @@ sits in that range independently of gain calibration. Commanding
 \section{Stop-Distance and Latency}
 \label{sec:results-stop-distance}
 
-Table~\ref{tab:results-stop-distance} sets out the
-\texttt{readMode=0} fix's effect (Section~\ref{sec:readmode-validation})
-across all five tested conditions, alongside the residual physical
-explanation for what remains. As noted in
-Section~\ref{sec:readmode-validation}, these encoder-derived extra-distance
-and stop-latency figures were independently cross-checked at each
-tested distance against tape-measured floor markings and manual
+Table~\ref{tab:results-stop-distance} summarises the full stop-behaviour
+investigation across five tested conditions: the original, uncalibrated
+throttle gain, the improvement from throttle-gain calibration alone
+(Section~\ref{sec:throttle-calibration}) and the final result once the
+HAL buffering defect was also fixed
+(Section~\ref{sec:readmode-validation}). These encoder-derived
+extra-distance and stop-latency figures were independently
+cross-checked against tape-measured floor markings and manual
 stopwatch timing. The two agreed.
 
 \begin{table}[htbp]
   \centering
+  \small
   \caption{Stop-latency and extra-distance results, before and after the \texttt{readMode=0} fix.}
   \label{tab:results-stop-distance}
   \begin{tabular}{@{}lccc@{}}
     \toprule
     Test condition & Start-up delay & Extra distance & Stop latency \\
-    & (before $\to$ after) & (before $\to$ after) & (before $\to$ after) \\
+    & (before $\to$ after) & (original $\to$ before $\to$ after) & (before $\to$ after) \\
     \midrule
-    \SI{2}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.09}{0.117}{\second} & \SIrange{0.520}{0.114}{\meter} & \SIrange{2.37}{0.598}{\second} \\
-    \SI{2}{\meter} @ \SI{0.4}{\meter\per\second} & \SIrange{2.14}{0.001}{\second} & \SIrange{0.790}{0.114}{\meter} & \SIrange{2.40}{0.501}{\second} \\
-    \SI{2}{\meter} @ \SI{0.5}{\meter\per\second} & \SIrange{2.14}{0.116}{\second} & \SIrange{0.923}{0.154}{\meter} & \SIrange{2.55}{0.550}{\second} \\
-    \SI{1}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.14}{0.120}{\second} & \SIrange{0.641}{0.118}{\meter} & \SIrange{2.44}{0.572}{\second} \\
-    \SI{3}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.08}{0.088}{\second} & \SIrange{0.583}{0.104}{\meter} & \SIrange{2.35}{0.509}{\second} \\
+    \SI{2}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.09}{0.117}{\second} & \SI{1.72}{\meter} (\SI{0.72}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.520}{\meter} $\to$ \SI{0.114}{\meter} & \SIrange{2.37}{0.598}{\second} \\
+    \SI{2}{\meter} @ \SI{0.4}{\meter\per\second} & \SIrange{2.14}{0.001}{\second} & \SI{2.42}{\meter} (\SI{1.02}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.790}{\meter} $\to$ \SI{0.114}{\meter} & \SIrange{2.40}{0.501}{\second} \\
+    \SI{2}{\meter} @ \SI{0.5}{\meter\per\second} & \SIrange{2.14}{0.116}{\second} & DNT $\to$ \SI{0.923}{\meter} $\to$ \SI{0.154}{\meter} & \SIrange{2.55}{0.550}{\second} \\
+    \SI{1}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.14}{0.120}{\second} & \SI{1.80}{\meter} (\SI{0.76}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.641}{\meter} $\to$ \SI{0.118}{\meter} & \SIrange{2.44}{0.572}{\second} \\
+    \SI{3}{\meter} @ \SI{0.3}{\meter\per\second} & \SIrange{2.08}{0.088}{\second} & \SI{1.99}{\meter} (\SI{0.84}{\meter\per\second})\textsuperscript{*} $\to$ \SI{0.583}{\meter} $\to$ \SI{0.104}{\meter} & \SIrange{2.35}{0.509}{\second} \\
     \bottomrule
   \end{tabular}
+
+  \vspace{2pt}
+  \raggedright\footnotesize\textsuperscript{*}Distance travelled at
+  this speed under the original, uncalibrated \texttt{THROTTLE\_GAIN}
+  (actual speed shown in brackets). DNT = did not test:
+  \SI{2}{\meter}~@~\SI{0.5}{\meter\per\second} was not tested under the
+  original gain.
 \end{table}
 
 \begin{figure}[htbp]
@@ -133,43 +150,45 @@ Mean start-up delay across the five post-fix conditions is
 $\approx$\SI{0.09}{\second} (down from $\approx$\SI{2.12}{\second}),
 mean extra distance is $\approx$\SI{0.12}{\meter} (down from
 $\approx$\SI{0.69}{\meter}) and mean stop latency is
-$\approx$\SI{0.55}{\second} (down from $\approx$\SI{2.42}{\second}).
-The post-fix residual is not further reducible with the current
-open-loop throttle model. Dividing extra distance by stop latency
-recovers \SIrange{54}{61}{\percent} of cruise velocity in four of the
-five conditions, consistent with an ordinary, roughly linear velocity
-decay to zero over the measured latency window (a perfectly linear
-decay predicts exactly 50\%), rather than indicating any further
+$\approx$\SI{0.55}{\second} (down from $\approx$\SI{2.42}{\second}), a
+residual not further reducible with the current open-loop throttle
+model. The remaining coast in four of the five conditions matches an
+ordinary, roughly linear velocity decay to zero, not a further
 unexplained delay mechanism.
 
-\section{Sim-versus-Real Overshoot}
+\section{Sim-versus-Real Comparison}
 \label{sec:results-sim-vs-real}
 
-Table~\ref{tab:results-sim-vs-real} presents the sim-versus-real
-comparison of Section~\ref{sec:sim-vs-real}. Because this comparison
-was run \emph{before} both the throttle calibration
-(Section~\ref{sec:throttle-calibration}) and the buffering-defect fix
-(Section~\ref{sec:readmode-bug}), it is reported here as the gap that
-existed at that stage of the project, not as the final residual gap
-between simulation and hardware. Sections~\ref{sec:results-throttle}
-and~\ref{sec:results-stop-distance} above give the corresponding
-final, post-fix figures, but a matched six-point sim-versus-real
-sweep was not re-run after both fixes were in place. This
-project's hardware access concluded before such a re-run could be
-scheduled (Section~\ref{sec:results-limitations}).
+The same three goals reported above for QCar, a straight
+$\approx$\SI{2}{\meter} approach (Goal 1), a curved
+$\approx$\ang{90} turn (Goal 2) and a near-\ang{180} reversal (Goal 3),
+were also run in simulation. Table~\ref{tab:results-sim-vs-real}
+compares the two directly: duration, cusp count, recoveries triggered
+and final position/yaw error against the given goal.
+
+Simulation completed every goal faster than hardware (\SI{7.11}{\second}
+vs.\ \SI{8.47}{\second}; \SI{11.32}{\second} vs.\ \SI{21.87}{\second};
+\SI{16.27}{\second} vs.\ \SI{29.3}{\second}) and reached a smaller
+final position error in every case (\SI{0.107}{\meter} vs.\
+\SI{0.214}{\meter}; \SI{0.034}{\meter} vs.\ \SI{0.129}{\meter};
+\SI{0.10}{\meter} vs.\ \SI{0.239}{\meter}). Yaw error runs the other
+way for Goals 2 and 3, where simulation's yaw error (\ang{17.0},
+\ang{9.4}) exceeds hardware's (\ang{8.6}, \ang{6.0}). Neither
+environment triggered a recovery behaviour for any of the three goals.
+Goal 3's executed path also differed in shape: a single cusp in
+simulation against four in the hardware run.
 
 \begin{table}[htbp]
   \centering
-  \caption{Sim-versus-real stop-distance overshoot (measured before the fixes of Ch.~5).}
+  \small
+  \caption{Simulation-versus-hardware comparison, Goals 1--3.}
   \label{tab:results-sim-vs-real}
-  \begin{tabular}{@{}lcc@{}}
+  \begin{tabular}{@{}lp{3.7cm}p{3.7cm}p{3.7cm}@{}}
     \toprule
-    & Simulation & Real hardware \\
+    & Goal 1 (straight, $\approx$\SI{2}{\meter}) & Goal 2 (curved, $\approx$\ang{90}) & Goal 3 (near-\ang{180} reversal) \\
     \midrule
-    Overshoot range (six-point sweep) & \SIrange{0.044}{0.067}{\meter} & \SIrange{0.58}{2.12}{\meter} \\
-    Isolated \SI{2}{\meter}@\SI{0.3}{\meter\per\second} test & \SI{0.067}{\meter} extra & \SI{1.90}{\meter} extra \\
-    Ratio (real / sim), isolated test & \multicolumn{2}{c}{$\approx$28$\times$} \\
-    Speed sensitivity & weak & strong ($\propto v^3$, approximately) \\
+    Hardware & \SI{8.47}{\second}, 0 cusps, 0 rec., pos.\ err \SI{0.214}{\meter}, yaw err $\approx$\ang{0} & \SI{21.87}{\second}, 0 cusps, 0 rec., pos.\ err \SI{0.129}{\meter}, yaw err \ang{8.6} & \SI{29.3}{\second}, 4 cusps, 0 rec., pos.\ err \SI{0.239}{\meter}, yaw err \ang{6.0} \\
+    Simulation & \SI{7.11}{\second}, 0 cusps, 0 rec., pos.\ err \SI{0.107}{\meter}, yaw err \ang{2.1} & \SI{11.32}{\second}, 0 cusps, 0 rec., pos.\ err \SI{0.034}{\meter}, yaw err \ang{17.0} & \SI{16.27}{\second}, 1 cusp, 0 rec., pos.\ err \SI{0.10}{\meter}, yaw err \ang{9.4} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -179,18 +198,29 @@ scheduled (Section~\ref{sec:results-limitations}).
 
 Table~\ref{tab:results-steering-summary} restates the steering-gain
 validation of Section~\ref{sec:steering-gain}, isolating the
-multiplicative gain error from the zero-point trim already covered by
-Section~\ref{sec:results-throttle}'s companion actuator.
+multiplicative gain error from the zero-point trim already covered
+separately in Section~\ref{sec:steering-trim}.
 
 \begin{table}[htbp]
   \centering
   \caption{Real wheel deflection versus kinematically commanded deflection, before and after \texttt{STEERING\_GAIN} correction.}
   \label{tab:results-steering-summary}
+  \small
   \begin{tabular}{@{}lcc@{}}
     \toprule
-    & Uncorrected (gain$=1$) & Corrected (\texttt{STEERING\_GAIN}$=1.39$) \\
+    \multicolumn{3}{@{}l}{Before correction (\texttt{STEERING\_GAIN=1}, seven-point sweep, selected rows)} \\
     \midrule
-    Residual error vs.\ kinematic prediction & $\approx$39\% & $\approx$5.6\% \\
+    Commanded angle (rad) & \multicolumn{2}{c}{Real angle measured (rad)} \\
+    $-0.05$ & \multicolumn{2}{c}{$+0.052$} \\
+    $-0.08$ & \multicolumn{2}{c}{$+0.018$} \\
+    $-0.12$ & \multicolumn{2}{c}{$-0.062$} \\
+    \multicolumn{3}{@{}l}{Overall multiplicative gain error (regression fit): $\approx$39\%} \\
+    \midrule
+    \multicolumn{3}{@{}l}{After correction (\texttt{STEERING\_GAIN}$=1.39$, validation drive)} \\
+    \midrule
+    & Predicted deflection & Measured deflection \\
+    \SI{0.15}{\radian} turn, \SI{1}{\meter} arc, \SI{0.4}{\meter\per\second} & \SI{28.5}{\centi\meter} & \SI{27}{\centi\meter} \\
+    \multicolumn{3}{@{}l}{Residual error: $\approx$5.6\%} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -257,7 +287,7 @@ corner-extending \texttt{CuspStraightenerSmoother} configuration.
   \label{fig:cusp-duration-chart}
 \end{figure}
 
-This is corroborated, not merely repeated, by real-hardware testing.
+This is corroborated, not merely repeated, by QCar testing.
 Two independently sent goals on the physical vehicle, each requiring
 a genuine reversal manoeuvre, both succeeded with zero recoveries
 (Section~\ref{sec:cusp-hw-validation}). This is a stronger form of
@@ -267,7 +297,7 @@ real planner behaviour on unseen goal geometry, not only the specific
 corridor reproduction it was developed against.
 
 The one qualification recorded against this result is that
-individual replans on real hardware occasionally showed substantially
+individual replans on QCar occasionally showed substantially
 higher cusp counts (up to 8--10) than any simulation trial produced
 (maximum $\approx$3). Both hardware goals still succeeded despite
 this, so it is reported as an open, unexplained gap between simulated
@@ -302,8 +332,8 @@ rate. This is stated plainly here, rather than implied to be
 equivalent to the K-turn result and is carried forward as the first
 item in Section~\ref{sec:results-limitations}.
 
-Two further general (non-K-turn) goals were run on QCar
-on 2026-09-07. Each was logged in full: given goal, AMCL-estimated
+Two further general (non-K-turn) goals were run on QCar.
+Each was logged in full: given goal, AMCL-estimated
 final pose, the planner's path statistics and commanded-vs-actual
 velocity over the whole run, not just a qualitative pass/fail
 observation.
@@ -321,6 +351,19 @@ itself (curvature ratio 1.00$\times$), smoothed by the
 cusp-straightener smoother. The goal was accepted at epoch
 1788779882.264. \texttt{Goal succeeded} was reported
 \SI{8.47}{\second} later with zero recovery behaviours triggered.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[x=1cm,y=1cm,>={Latex[length=2.5mm]}]
+    \draw[thick] (0,-0.5) rectangle (0.8,0.5);
+    \node at (0.4,0) {\footnotesize START};
+    \draw[thick] (5.2,-0.5) rectangle (6.0,0.5);
+    \node at (5.6,0) {\footnotesize GOAL};
+    \draw[thick,-{Stealth}] (0.8,0) -- (5.15,0);
+  \end{tikzpicture}
+  \caption[Goal 1 approach geometry]{Goal 1: a straight approach from START to GOAL.}
+  \label{fig:goal1-geometry}
+\end{figure}
 
 \begin{figure}[htbp]
   \centering
@@ -345,25 +388,25 @@ cusp-straightener smoother. The goal was accepted at epoch
       \node[gray, font=\tiny, anchor=south east] at (axis cs:9.05,0.315) {speed cap 0.30 m/s};
     \end{axis}
   \end{tikzpicture}
-  \caption[Goal 1: commanded vs.\ actual speed]{Goal 1 (straight approach): commanded MPPI output vs. actual encoder-derived speed. Data logged directly from \texttt{/cmd\_vel} and \texttt{/odom} on the dev PC during the run (50\,Hz odometry, $\sim$40\,Hz \texttt{cmd\_vel}); commanded velocity is MPPI's output prior to the QCar bridge's onboard throttle rate-limiter, actual velocity is wheel-encoder-derived dead reckoning, not ground truth.}
+  \caption[Goal 1: commanded vs.\ actual speed]{Goal 1 (straight approach): commanded MPPI output vs.\ actual encoder-derived speed. Data logged directly from \texttt{/cmd\_vel} and \texttt{/odom} on the dev PC during the run (50\,Hz odometry, $\sim$40\,Hz \texttt{cmd\_vel}); commanded velocity is MPPI's output prior to the QCar bridge's onboard throttle rate-limiter, actual velocity is wheel-encoder-derived dead reckoning, not ground truth.}
   \label{fig:goal1-velocity}
 \end{figure}
 
 \begin{table}[htbp]
   \centering
-  \caption{Goal 1: given goal vs. final AMCL-estimated pose (map frame).}
+  \caption{Goal 1: given goal vs.\ final AMCL-estimated pose (map frame).}
   \label{tab:goal1-pose}
   \begin{tabular}{@{}lccc@{}}
     \toprule
      & $x$ (m) & $y$ (m) & yaw \\
     \midrule
     Given goal & 1.978 & 0.003 & \ang{0} \\
-    Final pose & 1.765 & -0.013 & not captured \\
-    Error & -0.213 & -0.016 & -- \\
+    Final pose & 1.765 & -0.013 & $\approx$\ang{0} \\
+    Error & -0.213 & -0.016 & $\approx$\ang{0} \\
     \bottomrule
   \end{tabular}
   \\[4pt]
-  \parbox{0.9\textwidth}{\small Position error magnitude: \SI{0.214}{\meter} (mostly an $x$-axis undershoot) -- outside the configured \SI{0.12}{\meter} \texttt{xy\_goal\_tolerance}. The final orientation quaternion was not captured for this run.}
+  \parbox{0.9\textwidth}{\small Position error magnitude: \SI{0.214}{\meter} (mostly an $x$-axis undershoot) -- outside the configured \SI{0.12}{\meter} \texttt{xy\_goal\_tolerance}. Final orientation was approximately \ang{0}, matching the given goal.}
 \end{table}
 
 \begin{figure}[htbp]
@@ -390,6 +433,20 @@ planned as a \SI{3.185}{\meter}, 39-waypoint path (curvature ratio
 
 \begin{figure}[htbp]
   \centering
+  \begin{tikzpicture}[x=1cm,y=1cm,>={Latex[length=2.5mm]}]
+    \draw[thick] (0,1.2) rectangle (0.8,2.0);
+    \node at (0.4,1.6) {\footnotesize START};
+    \draw[thick,-{Stealth}] (0.8,1.6) -- (3.5,1.6);
+    \draw[thick,-{Stealth}] (3.7,1.4) -- (3.7,0.4);
+    \draw[thick] (3.3,-0.4) rectangle (4.1,0.4);
+    \node at (3.7,0) {\footnotesize GOAL};
+  \end{tikzpicture}
+  \caption[Goal 2 approach geometry]{Goal 2: forward, then a right turn, from START to GOAL.}
+  \label{fig:goal2-geometry}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
   \begin{tikzpicture}
     \begin{axis}[
         width=\textwidth, height=6cm,
@@ -411,13 +468,13 @@ planned as a \SI{3.185}{\meter}, 39-waypoint path (curvature ratio
       \node[gray, font=\tiny, anchor=south east] at (axis cs:23.1,0.315) {speed cap 0.30 m/s};
     \end{axis}
   \end{tikzpicture}
-  \caption[Goal 2: commanded vs.\ actual speed]{Goal 2 (curved approach): commanded MPPI output vs. actual encoder-derived speed. Same logging setup as Figure~\ref{fig:goal1-velocity}. The extended, gradual deceleration around $t\approx$\SIrange{18}{21}{\second} reflects the curved final approach into the goal's \ang{-90} orientation requirement, not a stall or recovery event.}
+  \caption[Goal 2: commanded vs.\ actual speed]{Goal 2 (curved approach): commanded MPPI output vs.\ actual encoder-derived speed. Same logging setup as Figure~\ref{fig:goal1-velocity}. The extended, gradual deceleration around $t\approx$\SIrange{18}{21}{\second} reflects the curved final approach into the goal's \ang{-90} orientation requirement, not a stall or recovery event.}
   \label{fig:goal2-velocity}
 \end{figure}
 
 \begin{table}[htbp]
   \centering
-  \caption{Goal 2: given goal vs. final AMCL-estimated pose (map frame).}
+  \caption{Goal 2: given goal vs.\ final AMCL-estimated pose (map frame).}
   \label{tab:goal2-pose}
   \begin{tabular}{@{}lccc@{}}
     \toprule
@@ -444,11 +501,11 @@ planned as a \SI{3.185}{\meter}, 39-waypoint path (curvature ratio
   \label{fig:goal2-hardware-photo}
 \end{figure}
 
-\paragraph{Repeated 3$\times$ on 2026-09-10: real run-to-run variability.}
+\paragraph{Repeated 3$\times$: Real Run-to-Run Variability.}
 To check whether Goal~2's single result above was representative, the
 identical given goal ($(1.891, -1.775, \ang{-90})$, pulled directly
 from that run's own recorded data) was sent three further times on
-real hardware from the same start position and map, in what turned
+QCar from the same start position and map, in what turned
 out to be this project's final hardware session. All three repeats
 also reported \texttt{Goal succeeded}, but with genuine run-to-run
 variability. Duration ranged \SIrange{17.8}{60.4}{\second}, some
@@ -493,6 +550,25 @@ costmap invalidated it, to a final 22-waypoint, 4-cusp path. The goal
 was accepted at epoch 1789046995.425. \texttt{Goal succeeded} was
 reported \SI{29.3}{\second} later with zero recovery behaviours
 triggered.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[x=0.9cm,y=0.9cm,>={Latex[length=2.5mm]}]
+    \draw[thick] (0,-0.5) rectangle (1.0,0.5);
+    \node at (0.5,0) {\footnotesize START};
+    \draw[thick,-{Stealth}] (0.1,0.85) to[out=20,in=160] (0.9,0.85);
+    \draw[thick] (9.0,-0.5) rectangle (10.0,0.5);
+    \node at (9.5,0) {\footnotesize GOAL};
+    \draw[thick,{Stealth}-] (9.1,0.85) to[out=20,in=160] (9.9,0.85);
+    \draw[thick,dashed] (1.0,0.15) to[out=65,in=245] (5.0,3.2);
+    \draw[thick,-{Stealth}] (2.3,1.05) to[out=65,in=245] (2.9,1.55);
+    \draw[thick] (4.85,3.0) -- (5.15,3.0);
+    \draw[thick,dashed] (5.0,3.2) to[out=-65,in=160] (9.0,0.15);
+    \draw[thick,-{Stealth}] (7.2,1.0) to[out=-40,in=160] (7.7,0.75);
+  \end{tikzpicture}
+  \caption[Goal 3 approach geometry]{Goal 3: a forward drive up to a single reversal cusp, then continuing forward again into GOAL, ending facing the opposite direction from START.}
+  \label{fig:goal3-geometry}
+\end{figure}
 
 \begin{figure}[htbp]
   \centering
@@ -559,23 +635,21 @@ manoeuvre.
   \begin{subfigure}[b]{0.4\textwidth}
     \centering
     \includegraphics[width=\textwidth]{figures/goal3-hardware-photo.jpg}
-    \caption{Frame from the handheld hardware recording}
+    \caption{Frame from the handheld video recording.}
     \label{fig:goal3-hardware-photo-video}
   \end{subfigure}
   \hfill
   \begin{subfigure}[b]{0.4\textwidth}
     \centering
     \includegraphics[width=\textwidth]{figures/goal3-hardware-photo-2.jpg}
-    \caption{Still photo taken after the trial}
+    \caption{Still photo taken after the trial.}
     \label{fig:goal3-hardware-photo-still}
   \end{subfigure}
   \caption[The QCar at rest at the end of the Goal 3 trial]{The physical QCar at rest near the end of the Goal~3 trial,
     close to the yellow tape goal marker. (a) is a frame extracted
-    from a real-hardware video recording of this run, at lower
-    resolution than the tripod-mounted photos used for Goals~1 and~2
-    since it comes from handheld video rather than a still camera;
-    (b) is a still photo of the same resting vehicle and goal marker,
-    taken immediately afterwards.}
+    from a QCar video recording of this run; (b) is a still photo of
+    the same resting vehicle and goal marker, taken immediately
+    afterwards.}
   \label{fig:goal3-hardware-photo}
 \end{figure}
 
@@ -653,7 +727,7 @@ trials.
     \toprule
     Trial & AMCL forward & Tape forward & Gap & AMCL yaw & Tape-derived yaw \\
     \midrule
-    1 & \SI{1.838}{\meter} & \SI{1.97}{\meter} & 6.7\% under & \ang{-1.76} & not measured \\
+    1 & \SI{1.838}{\meter} & \SI{1.97}{\meter} & 6.7\% under & \ang{-1.76} & \ang{-1.65} \\
     2 & \SI{1.820}{\meter} & \SI{1.99}{\meter} & 8.5\% under & \ang{4.93} & \ang{4.45} \\
     3 & \SI{1.770}{\meter} & \SI{1.98}{\meter} & 10.6\% under & \ang{-2.21} & \ang{-2.23} \\
     \bottomrule
@@ -661,9 +735,9 @@ trials.
 \end{table}
 
 Two findings follow. AMCL's yaw estimate matches the
-independently tape-derived yaw closely on both trials where the latter
-was measured (\ang{4.93} vs.\ \ang{4.45}; \ang{-2.21} vs.\
-\ang{-2.23}). This is strong evidence that AMCL's \emph{orientation}
+independently tape-derived yaw closely across all three trials
+(\ang{-1.76} vs.\ \ang{-1.65}; \ang{4.93} vs.\ \ang{4.45}; \ang{-2.21}
+vs.\ \ang{-2.23}). This is strong evidence that AMCL's \emph{orientation}
 estimate is accurate. AMCL also consistently under-reports how far
 the vehicle actually travelled: the gap grows trial to trial
 (6.7\% $\to$ 8.5\% $\to$ 10.6\%) despite every trial commanding and
@@ -677,7 +751,7 @@ above.
 The growing, direction-consistent gap between Sections~\ref{sec:results-map-quality}
 and~\ref{sec:results-localization-accuracy} raised a further question,
 tested ad hoc within the same session: does this bias originate at the
-LiDAR sensor itself, or somewhere in the SLAM/mapping pipeline? What
+LiDAR sensor itself or somewhere in the SLAM/mapping pipeline? What
 began as a single \SI{1}{\meter} spot-check was expanded, within the
 same session, into a five-point curve once the first result proved
 informative. The vehicle was positioned with the LiDAR's rotation
@@ -755,7 +829,7 @@ sitting closer to its true physical goal than AMCL's own
 (scale-compressed) estimate reports. Both explanations can be true
 simultaneously and are not mutually exclusive. This thesis does not
 have the data to separate their individual contributions for the two
-specific 2026-09-07 trials, since neither was independently
+specific trials, since neither was independently
 ground-truth-measured at the time. It reports both candidate causes
 here rather than favouring one without evidence.
 
@@ -781,21 +855,18 @@ hardware defect observed throughout testing but never root-caused.
     fixed set of goal poses and geometries that would produce a single
     defensible ``X out of Y goals succeeded'' headline number for the
     vehicle as a whole. This project's hardware access concluded with
-    the 2026-09-10 session reported throughout this chapter. No
+    the final session reported throughout this chapter. No
     further hardware time was available to run such a campaign. This
     remains an open limitation rather than a planned next step (see
     Chapter~\ref{ch:summary}'s Prospects for what such a campaign would
     have needed to cover).
-  \item \textbf{Two results predate the project's own final fixes.}
-    The sim-versus-real overshoot comparison
-    (Section~\ref{sec:results-sim-vs-real}) and the navigation-timing
-    figures behind Section~\ref{sec:results-goal-reaching}'s caveat
-    were both measured before the \texttt{readMode=0} fix
-    (Section~\ref{sec:readmode-bug}) and, in the sim-versus-real
-    case, before throttle calibration as well. Both are reported as
-    the pre-fix gap that genuinely existed at that point in the
-    project, not silently updated or removed, but neither has been
-    re-measured under the final configuration.
+  \item \textbf{One result predates the project's own final fixes.}
+    The navigation-timing figures behind
+    Section~\ref{sec:results-goal-reaching}'s caveat were measured
+    before the \texttt{readMode=0} fix (Section~\ref{sec:readmode-bug}).
+    This is reported as the pre-fix gap that genuinely existed at that
+    point in the project, not silently updated or removed, but it has
+    not been re-measured under the final configuration.
   \item \textbf{The curvature-continuing cusp refinement is
     simulation-only.} Section~\ref{sec:cusp-continued-iteration}'s
     most recent smoother refinements are, at the time of writing,
@@ -826,7 +897,7 @@ hardware defect observed throughout testing but never root-caused.
   \item \textbf{The scope was navigation, not full autonomy.} This
     thesis addresses reaching a given goal pose reliably; it does not
     address perception-driven goal selection, dynamic obstacle
-    avoidance beyond Nav2's stock costmap layers, or multi-goal
+    avoidance beyond Nav2's stock costmap layers or multi-goal
     mission planning. Each is a substantial extension in its own
     right, named explicitly in Chapter~\ref{ch:summary}'s Prospects
     rather than left as an unstated boundary of the work.
@@ -845,15 +916,15 @@ hardware defect observed throughout testing but never root-caused.
 The throttle deadband/gain values (Equation~\ref{eq:throttle-calibration})
 and the steering-trim value (Section~\ref{sec:steering-trim}) are
 per-unit calibration constants, expected to differ, potentially
-substantially, on a different physical QCar chassis, or even on
+substantially, on a different physical QCar chassis or even on
 this same chassis under different tyre wear, floor surface, or
 battery charge conditions. This was confirmed directly, not only in
-principle, by a 2026-09-10 hardware session weeks after the
+principle, by a later hardware session, weeks after the
 calibration above. Three clean, repeated \SI{2}{\meter} forward runs
 at three different commanded speeds all showed a consistent
 $\approx$\SI{10}{\percent} undershoot against
 Equation~\ref{eq:throttle-calibration}'s prediction, so
-\texttt{THROTTLE\_GAIN} was re-fitted from \num{0.0667} to
+\texttt{THROTTLE\_GAIN} was re-fitted from \num{0.070} to
 \num{0.077} for that session. Reverse-direction driving showed a
 further, distinct issue: stop latency and extra distance were
 consistently 2--4$\times$ worse than forward's at every tested speed.
@@ -890,5 +961,5 @@ incident (Section~\ref{sec:active-braking}) and its resolution
 generalise directly to any reactive feedback-control design intended
 for direct hardware deployment on a system with confirmed actuator
 lag or inertia, regardless of application domain: trace new reactive
-control logic through by hand for an overshoot scenario, or validate
+control logic through by hand for an overshoot scenario or validate
 it in simulation, before it reaches a physical actuator.

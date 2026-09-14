@@ -23,7 +23,12 @@ chapter:
     As Section~\ref{sec:odom-regression} documents, this plugin
     quietly reverted \texttt{/odom} back to ground truth despite the
     topic name and intent staying the same. This thesis surfaces
-    that discrepancy rather than leaving it uncorrected.
+    that discrepancy rather than leaving it uncorrected. On top of
+    this drive architecture, the full Nav2 stack was itself brought
+    up and validated end-to-end in simulation, following the same
+    teleoperation, SLAM and navigation phasing later applied on
+    hardware (Section~\ref{sec:nav2-sim-bringup}), before any of it
+    reached QCar.
   \item \textbf{Bridging the QCar's onboard compute}
     (Chapter~\ref{ch:hardware-bridge}): the vehicle's Jetson TX2 could
     not run the project's ROS~2 Humble stack natively. Its 32\,GB
@@ -88,7 +93,7 @@ ratio in Section~\ref{sec:sim-vs-real}, the buffering defect in
 Section~\ref{sec:readmode-bug} and the reversal-cusp freeze in
 Section~\ref{sec:cusp-freeze}. Each was, at some point, plausibly
 attributable to a simpler cause: localisation error, a
-request-delivery bug, physical coasting, or a tuning-only gain
+request-delivery bug, physical coasting or a tuning-only gain
 problem. Direct measurement subsequently ruled each of these out.
 
 The cusp-freeze investigation additionally illustrates the same
@@ -113,9 +118,8 @@ statistic rather than a qualitative assessment.
 Section~\ref{sec:results-limitations} states these gaps in full, in
 one place, rather than leaving them scattered across individual
 chapters. Most notably, no systematic goal-reaching success-rate
-campaign was run. Two results -- navigation timing and the
-sim-versus-real comparison -- predate the project's own final fixes.
-These are reported as open items rather
+campaign was run. One result -- navigation timing -- predates
+the project's own final fixes. This is reported as an open item rather
 than papered over. The exact next steps to close each of them are
 specific and immediately actionable rather than vague, as the
 Prospects below make concrete.
@@ -125,20 +129,17 @@ Prospects below make concrete.
 
 Each limitation named in Section~\ref{sec:results-limitations}
 motivates at least one item below. This project's hardware access
-concluded with the 2026-09-10 session reported throughout
+concluded with the final session reported throughout
 Chapter~\ref{ch:results}. Every item below is accordingly a direction
 for continuation work -- by this project or a successor -- rather than
 a next step this thesis itself still has the means to take:
 
 \begin{itemize}
-  \item \textbf{Re-running the two pre-fix measurements.}
+  \item \textbf{Re-running the pre-fix navigation-timing measurement.}
     \texttt{monitor\_goal\_timing.py} (Section~\ref{sec:display-lag})
-    and the six-point sim-versus-real sweep
-    (Section~\ref{sec:results-sim-vs-real}) were both measured before
-    the \texttt{readMode=0} fix. The sweep was also measured before
-    throttle calibration. Both would need a further QCar lab session
-    to re-run under the final configuration, closing
-    Section~\ref{sec:results-limitations}'s item~2 with genuine
+    was measured before the \texttt{readMode=0} fix. It would need a
+    further QCar lab session to re-run under the final configuration,
+    closing Section~\ref{sec:results-limitations}'s item~2 with genuine
     post-fix numbers instead of a qualitative confirmation.
   \item \textbf{A planned, repeated goal-reaching evaluation
     campaign.} Closing Section~\ref{sec:results-limitations}'s item~1
@@ -161,7 +162,7 @@ a next step this thesis itself still has the means to take:
     fit and re-running
     Sections~\ref{sec:results-map-quality}--\ref{sec:results-localization-accuracy}
     would show directly whether correcting the sensor closes the
-    larger map- and AMCL-level gaps, or whether a second, independent
+    larger map- and AMCL-level gaps or whether a second, independent
     effect inside Cartographer's pose-graph optimisation also
     contributes.
   \item \textbf{Closed-loop low-speed control.} This thesis's
@@ -169,7 +170,7 @@ a next step this thesis itself still has the means to take:
     identified the sub-\SI{0.25}{\meter\per\second} regime as a hard
     limit of open-loop duty control, not a remaining tuning gap.
     Reliable low-speed creep -- useful for close-quarters manoeuvring
-    or fine final-approach positioning -- would require closed-loop
+   or fine final-approach positioning -- would require closed-loop
     velocity feedback from the encoder rather than the fixed duty
     mapping used throughout this thesis.
   \item \textbf{Deceleration-profile tuning for coast reduction.} The
@@ -192,7 +193,7 @@ a next step this thesis itself still has the means to take:
     worth testing on other buffered or task-based hardware interfaces
     beyond the one QCar library examined here.
   \item \textbf{Closing the simulated-versus-real replan-complexity gap.}
-    Section~\ref{sec:cusp-hw-validation} found that real-hardware K-turn
+    Section~\ref{sec:cusp-hw-validation} found that QCar K-turn
     manoeuvres occasionally produce substantially higher per-replan
     cusp counts (8--10) than any simulation trial reproduced (maximum
     $\approx$3), without preventing either tested goal from succeeding.
@@ -200,7 +201,7 @@ a next step this thesis itself still has the means to take:
     isolated and remain open. One is \texttt{SmacPlannerHybrid}'s
     sensitivity to real, more awkward goal/environment geometry. The
     other is a residual, session-specific clock-offset effect similar
-    to the one implicated in Section~\ref{sec:cusp-followon-reverted}'s
+    to the one implicated in Section~\ref{sec:ispathvalid-reverted}'s
     reverted \texttt{IsPathValidDebounced} attempt. Relatedly, a
     deviation-aware critic weighting scheme was proposed but not
     implemented, as a controller-side complement to

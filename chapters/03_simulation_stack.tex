@@ -14,9 +14,10 @@ reaching the form used for hardware bridging
 (Sections~\ref{sec:baseline-manual}--\ref{sec:second-migration}).
 Along the way, it surfaced a four-part vehicle-dynamics bug pattern
 that recurred during testing of this drive architecture
-(Section~\ref{sec:not-moving-bug}). The chapter closes with
-a behaviour-tree fix specific to Ackermann-steered vehicles
-(Section~\ref{sec:bt-fix}).
+(Section~\ref{sec:not-moving-bug}). A behaviour-tree fix specific to
+Ackermann-steered vehicles followed
+(Section~\ref{sec:bt-fix}). The chapter closes with the full Nav2 stack's end-to-end bring-up in
+simulation (Section~\ref{sec:nav2-sim-bringup}).
 
 \section{Diagnostic Standard: Verification by Direct Measurement}
 \label{sec:methodology-overview}
@@ -257,7 +258,7 @@ accuracy gap between simulation and hardware in this project is not
 purely an empirically discovered discrepancy. It is, in part,
 structurally guaranteed by this architecture, since the simulated
 AMCL/Nav2 stack is given a perfect motion estimate that its
-real-hardware counterpart can never have. Any future comparison of
+QCar counterpart can never have. Any future comparison of
 localisation accuracy between simulation and hardware should account
 for this, rather than treating the two \texttt{/odom} streams as
 like for like.
@@ -351,23 +352,16 @@ fixing either one alone still left the vehicle stationary. Only
 fixing both together produced motion.
 
 Testing also surfaced a preceding, more basic defect: mesh URIs
-(\texttt{package://.../models/qcar/QCarBody.stl}-style paths) pointed
-at the wrong directory layout, rather than the correct
-\texttt{meshes/} layout and file names. As a result, the robot had
-\emph{no} collision geometry at all and fell through the simulated
-ground plane -- confirmed directly via \texttt{/odom} tracking a
-$z$-position reaching approximately $-38{,}000$\,m.
-
-This is worth recording as a separate, more fundamental lesson:
+pointed at the wrong directory layout, so the robot had \emph{no}
+collision geometry at all and fell through the simulated ground
+plane, confirmed directly via \texttt{/odom} tracking a $z$-position
+reaching approximately $-38{,}000$\,m. The deeper lesson is that
 Gazebo Classic's URDF-to-SDF loader silently rewrites
 \texttt{package://} mesh URIs to \texttt{model://}, which only
-resolves via the \texttt{GAZEBO\_MODEL\_PATH} environment variable.
-Since the package's \texttt{package.xml} did not export the
-\texttt{<gazebo\_ros gazebo\_model\_path=.../>} tag required for
-that resolution, correcting the path string alone would not have
-been sufficient. The fix instead used xacro's \texttt{\$(find)}
-substitution to build \texttt{file://} URIs directly, which bypass
-package-path resolution entirely.
+resolves via \texttt{GAZEBO\_MODEL\_PATH}. Since this package's
+\texttt{package.xml} did not export that variable, the fix used
+xacro's \texttt{\$(find)} substitution to build \texttt{file://} URIs
+directly instead, bypassing package-path resolution entirely.
 
 Further testing on this drive architecture also required a
 numerical-stability fix not initially anticipated: wheel rotational
@@ -380,26 +374,16 @@ seconds into driving. Bumping wheel inertia roughly 20$\times$
 lowering the steering and linear-velocity PID gains, resolved the
 crash and remained stable throughout subsequent testing.
 
-A further gain-tuning finding is worth stating as a general caution
-for reusing PID values across otherwise-identical vehicle
-configurations. A steering PID gain verified stable and accurate on
-a \emph{frictionless} wheel configuration produced a real turning
-radius roughly $6\times$ larger than commanded, once realistic wheel
-friction (bug~2 above) was added. The same low gain that had
-previously been sufficient, with no resistive torque to overcome,
-could no longer turn the front hubs against a now-gripping, rolling
-tyre.
-
-The fix raised \texttt{left/right\_steering\_pid\_gain} from
-\texttt{0.02} to \texttt{3.0}. This was verified directly via TF
-lookups on the steering-hub joints during a commanded 1.0\,m-radius
-turn, confirming hub angles converging to the correct
-$\sim$\ang{15}--\ang{18} Ackermann inner/outer split. A circle fit to
-the resulting odometry trace recovered a turning radius of 0.87\,m
-against the 1.0\,m commanded -- a reasonable margin, given the
-real-vs-ideal gap between the single-track model of
-Section~\ref{sec:ackermann-kinematics} and the vehicle's true
-four-wheel geometry.
+A further gain-tuning finding generalises as a caution for reusing
+PID values across otherwise-identical configurations. A steering PID
+gain verified stable on a \emph{frictionless} wheel setup produced a
+turning radius roughly $6\times$ larger than commanded once realistic
+wheel friction (bug~2 above) was added, since the same low gain could
+no longer turn the front hubs against a now-gripping tyre. Raising
+\texttt{left/right\_steering\_pid\_gain} from \texttt{0.02} to
+\texttt{3.0} fixed it, verified via TF lookups on the steering-hub
+joints confirming correct Ackermann inner/outer hub angles and a
+circle-fit turning radius of 0.87\,m against the 1.0\,m commanded.
 
 \subsection{Diagnostic Method}
 \label{sec:diagnostic-method}
@@ -424,7 +408,7 @@ change to the simulation stack.
 A behaviour tree is evaluated by repeatedly ``ticking'' it from the
 root \cite{colledanchise2018bt}. Each tick propagates down the tree.
 Every node it reaches returns one of \texttt{SUCCESS},
-\texttt{FAILURE}, or \texttt{RUNNING} (still in progress, re-tick
+\texttt{FAILURE} or \texttt{RUNNING} (still in progress, re-tick
 next cycle) back up to its parent. How a parent node interprets its
 children's results depends entirely on that parent's type.
 
@@ -519,6 +503,84 @@ usable path around an obstacle. At that point the vehicle clears
 both costmaps, waits and backs up, in that order. The outer
 \texttt{NavigateToPose} tree then retries planning.
 
+\section{End-to-End Nav2 Bring-Up in Simulation}
+\label{sec:nav2-sim-bringup}
+
+Simulation development followed the same three-phase approach
+Chapter~\ref{ch:nav-integration} later applies on hardware. Phase 1,
+teleoperation, is what the sections above cover: manual
+\texttt{/cmd\_vel} commands confirmed the drive architecture worked
+correctly before anything more complex was layered on top. Phase 2,
+SLAM, used Cartographer (Section~\ref{sec:cartographer}) to drive the
+simulated vehicle under teleoperation and build and save a Gazebo
+map via \texttt{map\_saver\_cli}, the same map
+Section~\ref{sec:cusp-repro}'s K-turn reproduction later extends.
+Phase 3, navigation, is the subject of this section.
+
+With the drive architecture, the behaviour-tree fix and a saved
+simulation map all in place, the full Nav2 stack was brought up and
+exercised end-to-end in Gazebo well before any of it reached QCar.
+This covered AMCL localisation against that map, global planning,
+the MPPI controller and its custom critics, path smoothing and the
+recovery behaviour tree together, not just the pieces exercised
+individually elsewhere in this chapter.
+
+This project ran a wide range of scenarios against this simulated
+stack: straight goals, tight corner and near-wall goals and K-turn
+manoeuvres requiring a reversing segment, along with deliberate
+recovery triggers. Two custom plugins, \texttt{EarlyCommitCritic} and
+\texttt{cusp\_straightener}, were developed and first validated here,
+though both are detailed later alongside their hardware validation
+(Sections~\ref{sec:mppi-critic} and~\ref{sec:cusp-freeze}). Iterating
+on the parameter set and these two plugins continued until every
+scenario reached its goal reliably. Only then did the project migrate
+this configuration to QCar (Section~\ref{sec:nav2-porting}).
+
+Figure~\ref{fig:full-stack-running} captures one such run in full: the
+terminal log's lifecycle transitions (top right) as each Nav2 server
+and lifecycle manager activates in turn, the RViz global plan and live
+navigation feedback panel (left) and the Gazebo view of the vehicle
+executing the goal (bottom right), all from a single session. This is
+the same bring-up sequence Chapter~\ref{ch:nav-integration}
+(Section~\ref{sec:nav2-porting}) later carries over to hardware,
+captured here with every stage of the stack visible at once.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/full-stack-running.png}
+  \caption[The Nav2 stack running end-to-end in simulation]{The Nav2 stack running end-to-end during this simulation
+    bring-up: bring-up log (top right, showing each server and
+    lifecycle manager activating in turn), RViz with the global plan
+    and live navigation feedback panel (left) and the simulated
+    vehicle executing the goal (bottom right).}
+  \label{fig:full-stack-running}
+\end{figure}
+
+Figure~\ref{fig:nav2-launch-flowchart-sim} traces the launch sequence
+this required. Unlike the eventual hardware branch, every process
+here, Gazebo, the spawned vehicle's plugins and the Nav2 stack,
+starts from a single \texttt{ros2 launch} invocation with no manual
+pre-launch step. This \texttt{launch\_sim} branch
+(Section~\ref{sec:nav2-porting}) is what the later hardware migration
+made opt-in rather than default.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/nav2-launch-flowchart-simulation.png}
+  \caption[Launch dependency graph of \texttt{qcar\_nav2.launch.py} (simulation branch)]{The launch dependency graph of
+    \texttt{qcar\_nav2.launch.py}'s simulation branch
+    (\texttt{launch\_sim:=true}): Gazebo bring-up and the spawned
+    vehicle's own plugins (right) supply \texttt{/odom},
+    \texttt{/scan} and \texttt{/tf} directly, with no manual relay
+    step, before the same \texttt{nav2\_bringup} include (centre) and
+    \texttt{RewrittenYaml}-configured parameter file (left) bring
+    localisation and navigation to \texttt{active}. Compare
+    Figure~\ref{fig:nav2-launch-flowchart}'s hardware branch, which
+    reaches the same activation point from a manually-started bridge
+    and relay instead.}
+  \label{fig:nav2-launch-flowchart-sim}
+\end{figure}
+
 \section{Summary of the Simulation-Stack Architecture}
 \label{sec:sim-stack-summary}
 
@@ -532,7 +594,10 @@ deliberately adopted (Section~\ref{sec:odom-regression}). Wheel
 collision geometry, friction and inertia have all been corrected
 (Section~\ref{sec:not-moving-bug}), PID gains are tuned for both
 drive and steering and a custom Ackermann-aware recovery behaviour
-tree is in place (Section~\ref{sec:bt-fix}). This is the
-configuration Chapter~\ref{ch:hardware-bridge} treats as the
-reference to be matched, as closely as the physical robot's own
-constraints allow, when bridging to hardware.
+tree is in place (Section~\ref{sec:bt-fix}). The full Nav2 stack
+was brought up and validated end-to-end against it, entirely in
+simulation (Section~\ref{sec:nav2-sim-bringup}). This is the
+configuration
+Chapter~\ref{ch:hardware-bridge} treats as the reference to be
+matched, as closely as the physical robot's own constraints allow,
+when bridging to hardware.

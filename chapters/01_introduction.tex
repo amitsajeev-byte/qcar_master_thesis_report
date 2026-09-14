@@ -16,7 +16,7 @@ navigate complex, populated environments without human intervention.
 Realising that promise at full scale is costly and safety-critical,
 so a common alternative is to first develop and validate the same
 core competencies -- mapping, localisation and navigation -- on a
-small-scale, real-hardware platform.
+small-scale, QCar platform.
 
 This thesis uses the Quanser QCar for exactly that purpose: a
 1/10th-scale, real-wheel-drive, Ackermann-steered research vehicle
@@ -67,7 +67,7 @@ developed for the QCar. The complete pipeline -- sensor-driven
 mapping, localisation and navigation -- had to be designed and
 built from scratch, not extended from an existing implementation.
 The \emph{actual state} was ``no working mapping,
-localisation, or navigation capability yet built for this project's
+localisation or navigation capability yet built for this project's
 QCar setup, in any form''.
 
 The \emph{target state} was two-fold, matching the two phases
@@ -228,7 +228,10 @@ chapters are structured as follows:
         and MPPI control components.
   \item Describes the simulation-side development of the navigation
         stack, including a recurring vehicle-dynamics bug pattern
-        uncovered during testing of this drive architecture.
+        uncovered during testing of this drive architecture, then
+        the full Nav2 stack's own end-to-end bring-up and validation
+        in simulation, following the same teleoperation/SLAM/navigation
+        phasing later applied on hardware.
   \item Presents the design of the TCP/JSON bridge that connects the
         ROS~2-based navigation stack to the robot's onboard compute,
         which cannot run that stack natively, including the odometry,

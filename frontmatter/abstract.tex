@@ -8,21 +8,21 @@
 % re-check if this text is edited further.
 
 Autonomous mobile robots are typically developed in simulation before
-deployment on physical hardware, yet the transfer to a real platform
-routinely exposes gaps that simulated testing alone does not predict.
-This thesis documents the migration of a ROS~2 Nav2 navigation stack
-from Gazebo simulation onto QCar, Quanser's Ackermann-steered
-vehicle. Limited onboard storage, together with a ROS~2 Dashing/Humble
-distribution incompatibility on the robot's onboard compute,
-motivated a custom TCP/JSON bridge. The thesis
-presents the bridge's design, the calibration of an open-loop throttle
-model against real actuator behaviour and the diagnosis of a hardware
-buffering defect misattributed at first to drivetrain coasting. The
-resulting system is validated through closed-loop Nav2 goal-reaching
-tests on the vehicle. The observed sim-to-real discrepancies are
-quantified.
+deployment on hardware, yet the transfer to a real platform routinely
+exposes gaps that simulated testing alone does not predict. This
+thesis documents the migration of a ROS~2 Nav2 navigation stack from
+Gazebo simulation onto QCar, Quanser's Ackermann-steered vehicle.
+Limited onboard storage, together with a ROS~2 Dashing/Humble
+incompatibility on the robot's onboard computer, motivated a custom
+TCP/JSON bridge. The thesis presents the bridge's design, the
+calibration of an open-loop throttle model against real actuator
+behaviour, the diagnosis of hardware defects and building an
+end-to-end full-stack navigation system, incorporating SLAM via
+Cartographer, AMCL localisation and MPPI-based control. Validation
+follows through closed-loop Nav2 goal-reaching tests on the vehicle,
+with the observed sim-to-real discrepancies quantified.
 
 \vspace{0.5cm}
-\noindent\textbf{Key words:} ROS~2, Nav2, Ackermann steering, sim-to-real
-transfer, Gazebo, Model Predictive Path Integral control, mobile robot
-navigation, Quanser QCar
+\noindent\textbf{Key words:} ROS~2, Nav2, SLAM, Cartographer, AMCL,
+Ackermann steering, Model Predictive Path Integral control,
+sim-to-real transfer, Quanser QCar

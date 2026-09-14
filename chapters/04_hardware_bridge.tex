@@ -1,4 +1,4 @@
-\chapter{Real-Hardware Bridge Architecture}
+\chapter{QCar Bridge Architecture}
 \label{ch:hardware-bridge}
 
 This chapter presents the architecture built to connect the
@@ -66,7 +66,7 @@ ROS~2 Humble respectively. Each RTPS message identifies the protocol
 version its sender implements \cite{omg2014rtps}. Two peers
 implementing different versions can fail to complete discovery even
 when the underlying network path is sound. This is not a network,
-firewall, or configuration problem that could be worked around
+firewall or configuration problem that could be worked around
 within ROS~2 itself.
 
 This result rules out one further option that the storage constraint
@@ -86,12 +86,7 @@ departing from the vendor-supported software image.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.75\textwidth]{figures/qcar-compute-sideview-photo.jpg}
-  \caption[Side view of the QCar's onboard compute stack]{A side view of the physical QCar showing the onboard
-    compute and sensing stack that this bridge architecture runs on:
-    the RPLiDAR unit, the Jetson TX2 carrier board (with its wireless
-    antennas and USB peripherals) and the wireless router used for
-    the development PC's network link, all mounted above the chassis
-    and drivetrain.}
+  \caption{The physical QCar, raised off the ground, whose onboard compute stack this bridge architecture runs on.}
   \label{fig:qcar-compute-sideview-photo}
 \end{figure}
 
@@ -183,7 +178,7 @@ This is also why \texttt{buf} accumulates across \texttt{recv()}
 calls, rather than assuming one \texttt{recv()} returns exactly one
 message. TCP's byte-stream semantics make no guarantee that message
 boundaries align with any particular \texttt{recv()} call's return:
-a message can legitimately arrive split across two calls, or two
+a message can legitimately arrive split across two calls or two
 messages can arrive concatenated in one call.
 Listing~\ref{lst:bridge-recv-loop}'s \texttt{while b'\textbackslash n' in buf}
 loop handles both cases uniformly, by always operating on whatever
@@ -352,7 +347,7 @@ this bug needed two independent corrections, not one.
 \label{sec:onboard-bridge-odom}
 
 Mapping (Cartographer, Section~\ref{sec:cartographer}) was
-successfully brought up on real hardware using scan-matching alone,
+successfully brought up on QCar using scan-matching alone,
 with \texttt{use\_odometry: false} / \texttt{provide\_odom\_frame:
 true} in the Cartographer configuration -- meaning the initial bridge
 implementation required no odometry extension at all for mapping to
@@ -610,8 +605,8 @@ vehicle idle.
 
 This chapter's bridge architecture makes the physical QCar appear,
 from the perspective of every ROS~2 node in the navigation stack, as
-an ordinary \texttt{/cmd\_vel}-in, \texttt{/odom}/\texttt{/scan}-out
-robot -- despite the underlying reality of two incompatible ROS~2
+an ordinary robot: \texttt{/cmd\_vel} in, \texttt{/odom} and
+\texttt{/scan} out -- despite the underlying reality of two incompatible ROS~2
 distributions connected by a bespoke TCP/JSON protocol. Getting the
 data flowing across that bridge to a fidelity usable by AMCL and
 Nav2, however, required three further, independently discovered

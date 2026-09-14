@@ -26,7 +26,7 @@ The Robot Operating System (ROS) is not an operating system in the
 kernel sense. It is a middleware and tooling ecosystem for distributed
 robotics software, where independent processes (\emph{nodes})
 communicate by publishing and subscribing to named, typed
-\emph{topics}, or by calling \emph{services} for synchronous
+\emph{topics} or by calling \emph{services} for synchronous
 request/response interactions. This node/topic/service nomenclature
 comes from the original 2009 ROS paper \cite{quigley2009ros}. \emph{Actions},
 for invoking long-running, cancellable, feedback-reporting tasks,
@@ -36,7 +36,7 @@ alongside topics and services \cite{macenski2022ros2}.
 The original ROS (subsequently referred to as ROS~1) relied on a
 custom TCP-based transport and a single centralised \texttt{roscore}
 master process for node discovery. This design was later recognised
-as unsuitable for real-time, multi-robot, or safety-relevant
+as unsuitable for real-time, multi-robot or safety-relevant
 deployments: the master is both a single point of failure and a
 source of unbounded discovery latency \cite{macenski2022ros2}.
 
@@ -115,7 +115,7 @@ versioned. A participant running an RTPS implementation that
 predates a given protocol revision does not necessarily reject a
 newer participant's announcement outright. Depending on exactly
 which fields changed between versions, it can instead fail to parse
-the announcement correctly, or parse it into a form that never
+the announcement correctly or parse it into a form that never
 completes the handshake. From the outside, this looks identical to
 no announcement having arrived at all.
 
@@ -142,7 +142,7 @@ no announcement having arrived at all.
     \draw[msg] (0,-5.6) -- (6,-5.9) node[midway,above,sloped] {user data (RTPS)};
     \draw[msg] (6,-6.4) -- (0,-6.7) node[midway,above,sloped] {user data (RTPS)};
   \end{tikzpicture}
-  \caption[DDS discovery: SPDP and SEDP stages]{DDS discovery, in two stages, before any user data is exchanged: SPDP lets participants become mutually aware with no central broker; SEDP then matches individual publishers to subscribers by topic, type and QoS. Both stages are themselves messages on the versioned RTPS wire protocol -- if either side fails to parse the other's SPDP/SEDP messages (e.g.\ due to a protocol-version mismatch), the process stops here with no error raised on either side, exactly the ``silent failure'' Section~\ref{sec:rmw-incompatibility} diagnosed on hardware.}
+  \caption[DDS discovery: SPDP and SEDP stages]{DDS discovery, in two stages, before any user data is exchanged: SPDP lets participants become mutually aware with no central broker; SEDP then matches individual publishers to subscribers by topic, type and QoS. Both stages are themselves messages on the versioned RTPS wire protocol. If either side fails to parse the other's SPDP/SEDP messages (e.g.\ due to a protocol-version mismatch), the process stops here with no error raised on either side, exactly the ``silent failure'' Section~\ref{sec:rmw-incompatibility} diagnosed on hardware.}
   \label{fig:dds-discovery}
 \end{figure}
 
@@ -177,7 +177,7 @@ QoS settings.
 By this rule, a \texttt{VOLATILE} subscriber against a
 \texttt{TRANSIENT\_LOCAL} publisher is formally compatible. This is
 exactly the configuration Section~\ref{sec:monitor-goal-timing}
-found, on real hardware, delivering zero messages in practice
+found, on QCar, delivering zero messages in practice
 despite being spec-compliant.
 
 Section~\ref{sec:monitor-goal-timing} discusses the likely practical
@@ -436,7 +436,7 @@ PID controller.
 
 Simulated friction is likewise not automatic: both the wheel links
 and the ground plane must be assigned explicit Coulomb friction
-coefficients (SDF's \texttt{mu1}/\texttt{mu2}), or the simulated
+coefficients (SDF's \texttt{mu1}/\texttt{mu2}) or the simulated
 vehicle exhibits perfect wheel slip with no resulting translation,
 regardless of commanded wheel speed. Neither failure mode raises an
 error. Both look, from the outside, like ``the robot is not
@@ -524,7 +524,7 @@ naive ``just tune the PID harder'' troubleshooting.
     \node at ($(sum.north west)+(0.08,-0.05)$) {\scriptsize $+$};
     \node at ($(sum.south)+(0.25,0.12)$) {\scriptsize $-$};
   \end{tikzpicture}
-  \caption[The drive plugin's per-wheel PID control loop]{The drive plugin's per-wheel torque control loop, re-evaluated every Gazebo physics step (\SI{1}{\kilo\hertz}): a commanded velocity is converted to a target angular velocity, compared against the physics engine's own measured wheel angular velocity to form an error $e(t)$ and passed through Equation~\ref{eq:pid}'s PID controller, whose output is applied directly as a joint torque -- three independent instances of this loop run per vehicle (drive, left steering, right steering).}
+  \caption[The drive plugin's per-wheel PID control loop]{The drive plugin's per-wheel torque control loop, re-evaluated every Gazebo physics step (\SI{1}{\kilo\hertz}): a commanded velocity is converted to a target angular velocity, compared against the physics engine's own measured wheel angular velocity to form an error $e(t)$ and passed through Equation~\ref{eq:pid}'s PID controller, whose output is applied directly as a joint torque. Three independent instances of this loop run per vehicle (drive, left steering, right steering).}
   \label{fig:pid-loop}
 \end{figure}
 
@@ -545,7 +545,7 @@ across it, though this project sets both equal -- isotropic
 friction. ODE itself approximates the true (circular)
 Coulomb friction cone in one of two ways: a default ``constant-force-limit''
 mode, where $\mu$ is treated as an absolute force limit independent
-of the actual normal force, or a more physically accurate ``friction
+of the actual normal force or a more physically accurate ``friction
 pyramid'' approximation, enabled via the \texttt{dContactApprox1}
 contact flag \cite{oderelease}. This project does not override
 either setting. The URDF's \texttt{<gazebo>} friction blocks
@@ -583,7 +583,7 @@ loop closures. It is exposed to ROS~2 via the
 \texttt{cartographer\_ros} package.
 
 Cartographer can either fuse external odometry into its
-scan-matching prediction, or perform scan-matching-only pose
+scan-matching prediction or perform scan-matching-only pose
 estimation (\texttt{use\_odometry: false}). In the latter case, it
 also provides the full \texttt{map} $\rightarrow$ \texttt{odom}
 $\rightarrow$ \texttt{base} transform (TF) chain itself
@@ -631,9 +631,15 @@ thesis, are:
   \item[Global planning] Nav2's \texttt{SmacPlannerHybrid} plugin,
     used in this project, plans a kinematically feasible path using a
     hybrid-state A* search with a Reeds-Shepp motion primitive set
-    \cite{dolgov2008hybridastar}, respecting the vehicle's minimum turning radius
-    (Table~\ref{tab:qcar-geometry}) rather than planning paths the
-    physical vehicle cannot actually follow.
+    \cite{dolgov2008hybridastar}. A Reeds-Shepp curve is the shortest
+    path between two poses for a car-like vehicle with a bounded
+    turning radius that can move both forward and backward, built from
+    straight-line segments and constant-curvature arcs -- unlike a
+    Dubins curve, which assumes forward motion only and so cannot
+    represent a reversing manoeuvre at all. This respects the vehicle's
+    minimum turning radius (Table~\ref{tab:qcar-geometry}) and allows a
+    reversing segment where one is genuinely required, rather than
+    planning paths the physical vehicle cannot actually follow.
   \item[Local trajectory control: MPPI] Model Predictive Path
     Integral control \cite{williams2015mppi} is a sampling-based
     model-predictive control method. At each control cycle, a large
@@ -742,7 +748,7 @@ a smooth, gradient-friendly cost function first.
 
     \node[gray] at (5.3,2.1) {sampled rollouts $\tau^{(k)}$};
   \end{tikzpicture}
-  \caption[MPPI's sampling-based control update]{MPPI's sampling-based control update: $K$ randomly perturbed control sequences are each rolled forward through the vehicle model into a candidate trajectory $\tau^{(k)}$ (grey), each scored by the total critic cost $S(\tau^{(k)})$; Equation~\ref{eq:mppi-weight}'s softmax weighting then combines all $K$ trajectories into one commanded control sequence (black) -- lower-cost rollouts contribute more weight, but every sampled trajectory contributes something, unlike a hard arg-min over a discrete set of candidates.}
+  \caption[MPPI's sampling-based control update]{MPPI's sampling-based control update: $K$ randomly perturbed control sequences are each rolled forward through the vehicle model into a candidate trajectory $\tau^{(k)}$ (grey), each scored by the total critic cost $S(\tau^{(k)})$; Equation~\ref{eq:mppi-weight}'s softmax weighting then combines all $K$ trajectories into one commanded control sequence (black). Lower-cost rollouts contribute more weight, but every sampled trajectory contributes something, unlike a hard arg-min over a discrete set of candidates.}
   \label{fig:mppi-concept}
 \end{figure}
 
@@ -789,16 +795,16 @@ cycle \cite{thrun2000probrob}:
     ]
     \node[block] (predict) at (0,0) {1. Prediction\\(motion model)};
     \node[block] (update) at (5,0) {2. Update\\(measurement model)};
-    \node[block] (resample) at (2.5,-2.6) {3. Resampling};
+    \node[block] (resample) at (2.5,-1.8) {3. Resampling};
 
     \draw[arr] (predict) -- (update);
     \draw[arr] (update) -- (resample);
-    \draw[arr] (resample.west) .. controls (-1.4,-1.6) and (-1.4,-0.6) .. (predict.south west);
+    \draw[arr] (resample.west) .. controls (-1.2,-1.1) and (-1.2,-0.5) .. (predict.south west);
 
     \draw[arr] (-0.2,1.3) -- (predict.north) node[midway,left,align=right] {odometry};
     \draw[arr] (5.2,1.3) -- (update.north) node[midway,right,align=left] {LiDAR scan\\+ map};
   \end{tikzpicture}
-  \caption[The AMCL predict-update-resample cycle]{The AMCL particle filter's prediction-update-resampling cycle, repeated on every new odometry/LiDAR pair: particles are propagated by the motion model, reweighted by how well each hypothesised pose explains the actual LiDAR scan, then resampled proportional to weight so the particle cloud statistically converges toward the true pose. The augmented-MCL recovery mechanism of Equation~\ref{eq:amcl-recovery} modifies step 3 only, occasionally drawing a fresh, uniformly random particle instead of resampling from the existing weighted set.}
+  \caption{The AMCL particle filter's prediction-update-resampling cycle, repeated on every new odometry/LiDAR pair (Section~\ref{sec:amcl-math}).}
   \label{fig:amcl-cycle}
 \end{figure}
 
@@ -880,11 +886,7 @@ LiDAR is discussed further.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.75\textwidth]{figures/qcar-sensors-battery-photo.jpg}
-  \caption[The QCar's front-mounted sensor stack]{The QCar's front-mounted sensor stack: the Intel RealSense
-    D435 RGBD camera and the RPLiDAR unit sit above the carrier board,
-    with the LiPo battery pack (labelled ``DO NOT PULL'') and
-    Ackermann front suspension visible below. This thesis's navigation
-    pipeline uses only the LiDAR, as discussed below.}
+  \caption{The Quanser QCar platform used throughout this thesis, raised off the ground.}
   \label{fig:qcar-sensors-battery-photo}
 \end{figure}
 
@@ -897,7 +899,7 @@ at the field-programmable gate array (FPGA) level regardless of what
 software commands \cite{quanser2023qcar}. The steering command range
 is $\pm 0.5$~rad against a physical limit of $\pm 0.5236$~rad
 ($\pm\ang{30}$). An overcurrent protection state, triggered at
-5\,A/8\,s, 10\,A/2\,s, or 15\,A/0.5\,s, forces the vehicle into a
+5\,A/8\,s, 10\,A/2\,s or 15\,A/0.5\,s, forces the vehicle into a
 neutral mode until the underlying hardware-in-the-loop device is
 restarted. Both limits are respected throughout every piece of
 drive-control code presented in this thesis.
@@ -961,7 +963,7 @@ thesis's methodology chapters:
     co-located ROS~2 processes on one machine. A physical robot may
     be split across incompatible middleware versions, unreliable
     wireless links, or, as found directly in this project, firmware-
-    or driver-level buffering that a simulation has no equivalent of
+   or driver-level buffering that a simulation has no equivalent of
     at all. Chapters~\ref{ch:hardware-bridge}
     and~\ref{ch:calibration} both document findings in this
     category.
@@ -973,7 +975,7 @@ these categories are not always distinguishable from the symptom
 alone. A fixed-duration, speed-independent delay between a software
 command and its physical effect is, from a black-box measurement
 standpoint, equally consistent with several explanations. It could
-be drivetrain coasting, a physical-effect explanation, or a
+be drivetrain coasting, a physical-effect explanation or a
 command-delivery lag in the bridge software, a communication-layer
 explanation. Or, as this thesis's own investigation ultimately
 found, it could be a stale-data artefact in a sensor read path -- a
